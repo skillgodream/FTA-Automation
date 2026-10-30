@@ -26,10 +26,14 @@ export function calculateEmployeeStatement(
   ownerId: string,
   existingStatement?: Partial<EmployeeStatement>
 ): EmployeeStatement {
+  // A record must be synced and source-verified before it can affect a
+  // reimbursement. Pending GPS verification is not eligible; records corrected
+  // in the source system become eligible once they are synced.
   const empRecords = allRecords.filter(
     (r) =>
       r.employeeId === employee.id &&
       r.syncStatus === 'Synced' &&
+      (r.sourceStatus === 'Verified' || r.sourceStatus === 'Corrected in Source') &&
       r.date.startsWith(month)
   );
 
