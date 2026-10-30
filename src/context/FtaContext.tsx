@@ -799,8 +799,15 @@ export const FtaProvider: React.FC<{ children: React.ReactNode }> = ({
     const stmt = statements.find((s) => s.id === dsp.statementId);
     if (!emp || !stmt) return;
 
+    // Re-sync only source-held records explicitly corrected against this
+    // dispute ticket. Never promote duplicate-excluded or unrelated records.
     const pendingEmpRecords = sourceRecords.filter(
-      (r) => r.employeeId === emp.id && r.syncStatus !== 'Synced'
+      (r) =>
+        r.employeeId === emp.id &&
+        r.sourceTool === dsp.sourceTool &&
+        r.syncStatus === 'Unsynced - Source Hold' &&
+        r.sourceStatus === 'Corrected in Source' &&
+        r.ticketRef === dsp.ticketNumber
     );
 
     try {
@@ -808,7 +815,7 @@ export const FtaProvider: React.FC<{ children: React.ReactNode }> = ({
 
       // Update records in memory & Firestore batch to Synced
       const updatedAllRecords = sourceRecords.map((r) => {
-        if (r.employeeId === emp.id && r.syncStatus !== 'Synced') {
+        if (pendingEmpRecords.some((pending) => pending.id === r.id)) {
           const syncedRec: SourceRecord = {
             ...r,
             sourceStatus: 'Verified',
@@ -948,7 +955,8 @@ export const FtaProvider: React.FC<{ children: React.ReactNode }> = ({
   const lockStatementPayout = async (statementId: string) => {
     if (!user) return;
     const stmt = statements.find((s) => s.id === statementId);
-    if (!stmt || stmt.payoutLocked) return;
+    // A final payout lock must only follow an explicit HR approval.
+    if (!stmt || stmt.payoutLocked || stmt.status !== 'HR Approved') return;
 
     try {
       await updateDoc(doc(db, 'statements', stmt.id), {
@@ -981,9 +989,7 @@ export const FtaProvider: React.FC<{ children: React.ReactNode }> = ({
     const eligible = statements.filter(
       (s) =>
         !s.payoutLocked &&
-        (s.status === 'HR Approved' ||
-          s.status === 'Confirmed by Employee' ||
-          s.status === 'Recalculated (Post-Dispute)')
+        s.status === 'HR Approved'
     );
     if (eligible.length === 0) return;
 
