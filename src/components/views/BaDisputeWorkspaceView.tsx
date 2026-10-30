@@ -1,24 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useFta } from '../../context/FtaContext';
-import { NavSection, UserRole } from '../../types/fta';
+import { DisputeTicket, NavSection, UserRole } from '../../types/fta';
 import {
-  ShieldAlert,
   Wrench,
-  RefreshCw,
   CheckCircle2,
   ArrowRight,
   Lock,
   Loader2,
   Database,
+  Sparkles,
 } from 'lucide-react';
 
 export const BaDisputeWorkspaceView: React.FC = () => {
   const {
+    employees,
     disputes,
     sourceRecords,
     statements,
-    updateDisputeStatus,
-    simulateSourceCorrection,
+    selectedEmployeeId,
     triggerTargetedReSync,
     setActiveSection,
     setActiveRole,
@@ -27,34 +26,75 @@ export const BaDisputeWorkspaceView: React.FC = () => {
 
   const [selectedDisputeId, setSelectedDisputeId] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [baFilter, setBaFilter] = useState<string>('ALL');
-  const [notesInput, setNotesInput] = useState<string>('');
-  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [busy, setBusy] = useState<boolean>(false);
 
-  // Prefer Rahul Sharma's ticket (DSP-1042) if present, otherwise first dispute
-  useEffect(() => {
-    const rahulDsp = disputes.find((d) => d.employeeId === 'EMP-1001');
-    if (rahulDsp) {
-      setSelectedDisputeId(rahulDsp.id);
-    } else if (disputes.length > 0 && !selectedDisputeId) {
-      setSelectedDisputeId(disputes[0].id);
+  const allDisputeItems: DisputeTicket[] = useMemo(() => {
+    const hasRahulDispute = disputes.some((d) => d.employeeId === 'EMP-1001');
+    if (hasRahulDispute) {
+      return disputes;
     }
-  }, [disputes, selectedDisputeId]);
+
+    const rahulEmp = employees.find((e) => e.id === 'EMP-1001');
+    const rahulStmt = statements.find((s) => s.employeeId === 'EMP-1001');
+    const rahulUnsynced = sourceRecords.filter(
+      (r) => r.employeeId === 'EMP-1001' && r.syncStatus !== 'Synced'
+    );
+
+    if (rahulEmp && rahulStmt && rahulUnsynced.length > 0) {
+      const virtualRahulDispute: DisputeTicket = {
+        id: 'DSP-1042',
+        ticketNumber: 'FTA-2026-1042',
+        statementId: rahulStmt.id,
+        employeeId: rahulEmp.id,
+        employeeName: rahulEmp.name,
+        designation: rahulEmp.designation,
+        department: rahulEmp.department,
+        baseCity: rahulEmp.baseCity,
+        month: rahulStmt.month,
+        claimType: 'Local Meetings',
+        systemRecordedValue: rahulStmt.eligibleLocalMeetings,
+        employeeReportedValue:
+          rahulStmt.eligibleLocalMeetings + rahulUnsynced.length,
+        disputedDelta: rahulUnsynced.length,
+        financialImpact: rahulUnsynced.length * rahulStmt.localRate,
+        employeeMessage:
+          'I completed 42 meetings, but the system shows only 40.',
+        aiInterpretation:
+          '2 Prowl meetings (PRW-8841, PRW-8842) held pending GPS check-in verification.',
+        assignedBa: rahulEmp.baOwner,
+        baRegion: rahulEmp.baRegion,
+        sourceTool: rahulEmp.sourceTool,
+        status: 'Open',
+        sourceCorrected: false,
+        reSynced: false,
+        resolutionNotes: 'Pending BD/BA fix in Prowl.',
+        ownerId: rahulEmp.ownerId,
+        createdAt: '2026-10-29 10:15 IST',
+      };
+      return [virtualRahulDispute, ...disputes];
+    }
+
+    return disputes;
+  }, [disputes, employees, statements, sourceRecords]);
+
+  useEffect(() => {
+    const matchByEmp = allDisputeItems.find(
+      (d) => d.employeeId === selectedEmployeeId
+    );
+    if (matchByEmp) {
+      setSelectedDisputeId(matchByEmp.id);
+    } else if (allDisputeItems.length > 0 && !selectedDisputeId) {
+      setSelectedDisputeId(allDisputeItems[0].id);
+    }
+  }, [selectedEmployeeId, allDisputeItems.length]);
 
   const activeDispute =
-    disputes.find((d) => d.id === selectedDisputeId) || disputes[0];
+    allDisputeItems.find((d) => d.id === selectedDisputeId) ||
+    allDisputeItems[0];
 
-  useEffect(() => {
-    if (activeDispute) {
-      setNotesInput(activeDispute.resolutionNotes);
-    }
-  }, [activeDispute?.id, activeDispute?.resolutionNotes]);
-
-  const uniqueBas = Array.from(new Set(disputes.map((d) => d.assignedBa)));
-
-  const filteredDisputes = disputes.filter((d) => {
-    if (statusFilter !== 'ALL' && d.status !== statusFilter) return false;
-    if (baFilter !== 'ALL' && d.assignedBa !== baFilter) return false;
+  const filteredDisputes = allDisputeItems.filter((d) => {
+    if (statusFilter === 'OPEN') return d.status !== 'Resolved';
+    if (statusFilter === 'RESOLVED') return d.status === 'Resolved';
     return true;
   });
 
@@ -65,447 +105,382 @@ export const BaDisputeWorkspaceView: React.FC = () => {
     (r) => r.syncStatus !== 'Synced'
   );
   const linkedStmt = activeDispute
-    ? statements.find((s) => s.id === activeDispute.statementId)
+    ? statements.find(
+        (s) =>
+          s.id === activeDispute.statementId ||
+          s.employeeId === activeDispute.employeeId
+      )
     : undefined;
 
-  const handleSimulateCorrection = async () => {
-    if (!activeDispute) return;
-    setBusyAction('correct');
-    try {
-      await simulateSourceCorrection(activeDispute.id);
-    } finally {
-      setBusyAction(null);
-    }
-  };
+  const nextOpenDispute = allDisputeItems.find(
+    (d) => d.id !== activeDispute?.id && !d.reSynced && d.status !== 'Resolved'
+  );
 
-  const handleTargetedReSync = async () => {
-    if (!activeDispute) return;
-    setBusyAction('resync');
+  const handleFixAndRecalculate = async () => {
+    if (!activeDispute || busy) return;
+    setBusy(true);
     try {
       await triggerTargetedReSync(activeDispute.id);
     } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleStatusChange = async (newStatus: string) => {
-    if (!activeDispute) return;
-    setBusyAction(newStatus);
-    try {
-      await updateDisputeStatus(activeDispute.id, newStatus, notesInput);
-    } finally {
-      setBusyAction(null);
+      setBusy(false);
     }
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 pb-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-medium text-slate-500">
-            Department & Region Auto-Routing · Source-Only Correction Governance · Targeted Re-Sync
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mt-1">
-            BA Dispute Management Workspace
+          <p className="text-[13px] font-medium text-[#6B7280]">
+            Source Tool Verification · Prowl & LMS Sync
+          </p>
+          <h1 className="text-[26px] font-semibold text-[#111827] tracking-tight mt-0.5">
+            Dispute Resolution
           </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={baFilter}
-            onChange={(e) => setBaFilter(e.target.value)}
-            className="px-3 py-2 text-xs font-medium text-slate-900 bg-white border border-slate-300 rounded-lg"
-          >
-            <option value="ALL">All Assigned BAs ({disputes.length})</option>
-            {uniqueBas.map((ba) => (
-              <option key={ba} value={ba}>
-                {ba}
-              </option>
-            ))}
-          </select>
+        <button
+          onClick={() => {
+            setActiveRole(UserRole.HR);
+            setActiveSection(NavSection.HR_APPROVAL_LOCK);
+          }}
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-[#09090B] hover:bg-[#1F2937] rounded-full transition-colors cursor-pointer self-start sm:self-auto"
+        >
+          <span>Approve Exceptions</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
 
-          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+      {/* MOBILE ONLY (< lg): Compact Pill Tabs for Dispute Selection */}
+      <div className="lg:hidden flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+        {allDisputeItems.map((d) => {
+          const isSelected = activeDispute?.id === d.id;
+          const isOpen = d.status !== 'Resolved';
+          return (
+            <button
+              key={d.id}
+              onClick={() => {
+                setSelectedDisputeId(d.id);
+                setSelectedEmployeeId(d.employeeId);
+              }}
+              className={`px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-2 whitespace-nowrap cursor-pointer transition-all shrink-0 ${
+                isSelected
+                  ? 'bg-[#09090B] text-white shadow-xs'
+                  : 'bg-white text-[#111827] border border-[#E5E7EB]'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isOpen ? 'bg-[#F59E0B]' : 'bg-[#2EAF53]'
+                }`}
+              />
+              <span>{d.employeeName}</span>
+              <span className="opacity-75">+₹{d.financialImpact}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Desktop Master-Detail Split Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-7 items-start">
+        {/* Left Pane (Desktop Only): Disputed Employee Cards (4 cols) */}
+        <div className="hidden lg:block lg:col-span-4 bg-white rounded-[28px] p-5 shadow-[0_4px_20px_rgba(17,24,39,0.03)] space-y-4">
+          <div className="flex items-center gap-1 p-1 bg-[#F4F5F7] rounded-full">
             {[
-              'ALL',
-              'Open',
-              'Under Review',
-              'Clarification Required',
-              'Approved',
-              'Rejected',
-              'Resolved',
+              { id: 'ALL', label: `All (${allDisputeItems.length})` },
+              {
+                id: 'OPEN',
+                label: `Pending (${allDisputeItems.filter((d) => d.status !== 'Resolved').length})`,
+              },
+              {
+                id: 'RESOLVED',
+                label: `Synced (${allDisputeItems.filter((d) => d.status === 'Resolved').length})`,
+              },
             ].map((st) => (
               <button
-                key={st}
-                onClick={() => setStatusFilter(st)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  statusFilter === st
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                key={st.id}
+                onClick={() => setStatusFilter(st.id)}
+                className={`flex-1 py-1.5 text-[11px] font-semibold rounded-full whitespace-nowrap cursor-pointer transition-all ${
+                  statusFilter === st.id
+                    ? 'bg-white text-[#111827] shadow-xs'
+                    : 'text-[#6B7280] hover:text-[#111827]'
                 }`}
               >
-                {st === 'ALL' ? 'All' : st}
+                {st.label}
               </button>
             ))}
           </div>
-        </div>
-      </div>
 
-      {/* Main Split Workbench */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-        {/* Left: Dispute Queue List */}
-        <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col">
-          <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Routed Dispute Tickets ({filteredDisputes.length})
-            </h2>
-            <span className="text-xs text-slate-500">Click ticket to inspect</span>
-          </div>
-
-          <div className="divide-y divide-slate-200 flex-1 overflow-y-auto max-h-[680px]">
+          <div className="space-y-3">
             {filteredDisputes.map((d) => {
               const isSelected = activeDispute?.id === d.id;
+              const isOpen = d.status !== 'Resolved';
               return (
-                <div
+                <button
                   key={d.id}
-                  onClick={() => setSelectedDisputeId(d.id)}
-                  className={`p-4 cursor-pointer transition-colors ${
-                    isSelected ? 'bg-blue-50/70' : 'hover:bg-slate-50'
+                  onClick={() => {
+                    setSelectedDisputeId(d.id);
+                    setSelectedEmployeeId(d.employeeId);
+                  }}
+                  className={`w-full text-left p-4 rounded-[22px] transition-all cursor-pointer border ${
+                    isSelected
+                      ? 'border-[#111827] bg-[#F4F5F7]'
+                      : isOpen
+                      ? 'border-[#EFE0D6] bg-[#EFE0D6]/40 hover:bg-[#EFE0D6]/70'
+                      : 'border-[#E5E7EB] bg-white hover:bg-[#F4F5F7]/60'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-xs font-bold text-slate-900">
+                    <span className="text-xs font-bold text-[#111827]">
                       {d.ticketNumber}
                     </span>
                     <span
-                      className={`text-xs font-semibold ${
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
                         d.status === 'Resolved'
-                          ? 'text-emerald-700'
-                          : d.status === 'Open'
-                          ? 'text-amber-700'
-                          : 'text-blue-700'
+                          ? 'bg-[#CDE5D0] text-[#2E7D32]'
+                          : 'bg-[#EFE0D6] text-[#B85D2B]'
                       }`}
                     >
-                      {d.status}
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          d.status === 'Resolved'
+                            ? 'bg-[#2E7D32]'
+                            : 'bg-[#B85D2B]'
+                        }`}
+                      />
+                      {d.status === 'Resolved' ? 'Synced' : 'Pending Sync'}
                     </span>
                   </div>
 
-                  <div className="text-sm font-semibold text-slate-900 mt-1">
-                    {d.employeeName} ({d.employeeId})
+                  <div className="text-[15px] font-semibold text-[#111827] mt-1.5">
+                    {d.employeeName}
+                  </div>
+                  <div className="text-[12px] text-[#6B7280]">
+                    {d.baseCity} · Source: {d.sourceTool}
                   </div>
 
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    {d.designation} · {d.department} · {d.baseCity} · Source:{' '}
-                    {d.sourceTool}
-                  </div>
-
-                  <div className="mt-2 pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs font-mono tabular-nums">
-                    <span className="text-slate-600">
-                      {d.claimType}: Sys {d.systemRecordedValue} vs Emp{' '}
+                  <div className="mt-3 pt-2.5 border-t border-[#E5E7EB]/80 flex items-center justify-between text-xs">
+                    <span className="text-[#4B5563] font-medium">
+                      Synced {d.systemRecordedValue} → Claim{' '}
                       {d.employeeReportedValue}
                     </span>
-                    <span className="font-semibold text-slate-900">
-                      Delta: +{d.disputedDelta} (₹{d.financialImpact})
+                    <span className="font-bold text-[#111827]">
+                      +₹{d.financialImpact}
                     </span>
                   </div>
-
-                  <div className="text-[11px] text-slate-500 mt-1">
-                    Routed to: <span className="font-medium text-slate-700">{d.assignedBa}</span>
-                  </div>
-                </div>
+                </button>
               );
             })}
           </div>
         </div>
 
-        {/* Right: Active Ticket Investigation & Source Correction Workbench */}
-        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between space-y-6">
+        {/* Right Pane: Single-Action BD / BA Workbench (8 cols) */}
+        <div className="lg:col-span-8 bg-white rounded-[28px] p-6 space-y-6 shadow-[0_4px_20px_rgba(17,24,39,0.03)]">
           {activeDispute ? (
             <>
-              <div className="space-y-5">
-                {/* Ticket Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-200">
+              {/* Ticket Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#F1F2F6]">
+                <div>
+                  <div className="text-[12px] font-medium text-[#9CA3AF]">
+                    {activeDispute.ticketNumber} · Assigned BD / BA:{' '}
+                    {activeDispute.assignedBa.split(' (')[0]}
+                  </div>
+                  <h2 className="text-[22px] font-semibold text-[#111827] tracking-tight mt-0.5">
+                    {activeDispute.employeeName} ({activeDispute.designation})
+                  </h2>
+                </div>
+
+                <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#F4F5F7] rounded-full text-xs font-semibold text-[#374151]">
+                  <Lock className="w-3.5 h-3.5 text-[#6B7280]" />
+                  <span>Source Verification Only</span>
+                </div>
+              </div>
+
+              {/* Employee Dispute Message */}
+              <div className="p-4 rounded-[20px] bg-[#F3F4F6]">
+                <div className="text-[11px] font-semibold text-[#6B7280]">
+                  Employee Claim Note:
+                </div>
+                <div className="text-[14px] font-semibold text-[#111827] mt-1">
+                  "{activeDispute.employeeMessage}"
+                </div>
+              </div>
+
+              {/* 3 Soft Pastel Comparison Tiles */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-5 rounded-[24px] bg-[#D8CEF8] flex flex-col justify-between">
+                  <div className="w-9 h-9 rounded-full bg-[#C5B6F2] flex items-center justify-center text-[#5B3CC4] mb-3">
+                    <Database className="w-4 h-4" />
+                  </div>
                   <div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <span className="font-mono font-bold text-slate-900">
-                        {activeDispute.ticketNumber}
-                      </span>
-                      <span aria-hidden="true">·</span>
-                      <span>Created {activeDispute.createdAt}</span>
-                      <span aria-hidden="true">·</span>
-                      <span>Assigned: {activeDispute.assignedBa}</span>
+                    <div className="text-[12px] font-medium text-[#111827]/80">
+                      {activeDispute.reSynced
+                        ? `Synced (${activeDispute.sourceTool})`
+                        : `Recorded (${activeDispute.sourceTool})`}
                     </div>
-                    <h2 className="text-lg font-bold text-slate-900 mt-1">
-                      {activeDispute.employeeName} — {activeDispute.claimType}{' '}
-                      Discrepancy
-                    </h2>
-                  </div>
-
-                  <div className="text-left sm:text-right">
-                    <div className="text-xs text-slate-500">Ticket Status</div>
-                    <div className="text-sm font-bold text-blue-700">
-                      {activeDispute.status}
+                    <div className="text-[26px] font-bold text-[#111827] mt-0.5">
+                      {activeDispute.reSynced
+                        ? activeDispute.employeeReportedValue
+                        : activeDispute.systemRecordedValue}
                     </div>
                   </div>
                 </div>
 
-                {/* Comparison Strip */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <div className="text-[11px] text-slate-500">
-                      System Recorded ({activeDispute.sourceTool})
-                    </div>
-                    <div className="text-lg font-bold font-mono tabular-nums text-slate-900 mt-0.5">
-                      {activeDispute.systemRecordedValue} {activeDispute.claimType}
-                    </div>
+                <div className="p-5 rounded-[24px] bg-[#D5E1EC] flex flex-col justify-between">
+                  <div className="w-9 h-9 rounded-full bg-[#BDD0E2] flex items-center justify-center text-[#2B6CB0] mb-3">
+                    <Sparkles className="w-4 h-4" />
                   </div>
-
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <div className="text-[11px] text-slate-500">
-                      Employee Reported Figure
-                    </div>
-                    <div className="text-lg font-bold font-mono tabular-nums text-blue-700 mt-0.5">
-                      {activeDispute.employeeReportedValue} {activeDispute.claimType}
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <div className="text-[11px] text-slate-500">
-                      Disputed Delta & Impact
-                    </div>
-                    <div className="text-lg font-bold font-mono tabular-nums text-amber-800 mt-0.5">
-                      +{activeDispute.disputedDelta} (+₹
-                      {activeDispute.financialImpact.toLocaleString('en-IN')})
-                    </div>
-                  </div>
-                </div>
-
-                {/* Employee Message & Gemini Interpretation */}
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
                   <div>
-                    <span className="font-semibold text-slate-900">
-                      Employee Statement Reply:{' '}
-                    </span>
-                    <span className="text-slate-700 italic">
-                      "{activeDispute.employeeMessage}"
-                    </span>
-                  </div>
-                  <div className="pt-2 border-t border-slate-200/80 text-slate-600">
-                    <span className="font-semibold text-slate-900">
-                      Gemini Dispute Classification:{' '}
-                    </span>
-                    {activeDispute.aiInterpretation}
-                  </div>
-                </div>
-
-                {/* Strict Governance Rule Box: No Direct Manual Overwrite */}
-                <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 flex items-start justify-between gap-4">
-                  <div className="space-y-1 text-xs">
-                    <div className="font-semibold text-amber-950 flex items-center gap-1.5">
-                      <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0" />
-                      <span>
-                        Governance Control: Direct Meeting Count Overwrite Disabled
-                      </span>
+                    <div className="text-[12px] font-medium text-[#111827]/80">
+                      Employee Claimed
                     </div>
-                    <p className="text-amber-900 leading-relaxed">
-                      Business Associates cannot manually edit tool-sourced
-                      meeting counts inside the FTA platform. You must inspect and
-                      fix the record in <strong>{activeDispute.sourceTool}</strong>{' '}
-                      and trigger a <strong>Targeted Re-Sync</strong>.
-                    </p>
-                  </div>
-                  <div className="shrink-0">
-                    <label className="block text-[10px] font-medium text-amber-900">
-                      FTA Count (Locked)
-                    </label>
-                    <div className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/80 border border-amber-300 rounded-md font-mono text-xs text-slate-500 cursor-not-allowed">
-                      <Lock className="w-3 h-3" />
-                      <span>
-                        {linkedStmt?.eligibleLocalMeetings ??
-                          activeDispute.systemRecordedValue}
-                      </span>
+                    <div className="text-[26px] font-bold text-[#111827] mt-0.5">
+                      {activeDispute.employeeReportedValue}
                     </div>
                   </div>
                 </div>
 
-                {/* Simulated Source System Inspector */}
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-900">
-                      <Database className="w-3.5 h-3.5 text-blue-600" />
-                      <span>
-                        {activeDispute.sourceTool} Source Record Inspector —{' '}
-                        {activeDispute.employeeName}
-                      </span>
-                    </div>
-                    <span className="text-[11px] font-mono text-slate-500">
-                      {empSourceRecords.filter((r) => r.syncStatus === 'Synced').length}{' '}
-                      Synced · {unsyncedEmpRecords.length} Unsynced Hold(s)
-                    </span>
+                <div
+                  className={`p-5 rounded-[24px] flex flex-col justify-between ${
+                    activeDispute.reSynced ? 'bg-[#CDE5D0]' : 'bg-[#EFE0D6]'
+                  }`}
+                >
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center mb-3 ${
+                      activeDispute.reSynced
+                        ? 'bg-[#B6D8BA] text-[#2E7D32]'
+                        : 'bg-[#E4CCBD] text-[#B85D2B]'
+                    }`}
+                  >
+                    <Wrench className="w-4 h-4" />
                   </div>
+                  <div>
+                    <div className="text-[12px] font-medium text-[#111827]/80">
+                      {activeDispute.reSynced
+                        ? 'Recalculated Impact'
+                        : 'Payout Difference'}
+                    </div>
+                    <div className="text-[26px] font-bold text-[#111827] mt-0.5">
+                      +₹{activeDispute.financialImpact}
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-200 text-xs">
-                    {/* Show unsynced records first, then most recent synced records */}
-                    {[
-                      ...unsyncedEmpRecords,
-                      ...empSourceRecords
-                        .filter((r) => r.syncStatus === 'Synced')
-                        .slice(-5),
-                    ].map((rec) => (
+              {/* Held Source Records Mini-List */}
+              {unsyncedEmpRecords.length > 0 && (
+                <div className="space-y-2.5">
+                  <div className="text-xs font-semibold text-[#111827]">
+                    Held Meetings in {activeDispute.sourceTool} (
+                    {unsyncedEmpRecords.length})
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {unsyncedEmpRecords.map((rec) => (
                       <div
                         key={rec.id}
-                        className={`px-4 py-2.5 flex items-center justify-between gap-3 ${
-                          rec.syncStatus !== 'Synced'
-                            ? 'bg-amber-50/40'
-                            : 'bg-white'
-                        }`}
+                        className="px-4 py-3 rounded-[18px] bg-[#EFE0D6]/50 border border-[#E4CCBD] flex items-center justify-between gap-2 text-xs"
                       >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-semibold text-slate-900">
-                              {rec.externalRefId}
-                            </span>
-                            <span aria-hidden="true">·</span>
-                            <span className="font-mono text-slate-600">
-                              {rec.date}
-                            </span>
-                            <span aria-hidden="true">·</span>
-                            <span className="font-medium text-slate-800 truncate">
-                              {rec.clientName}
-                            </span>
+                        <div>
+                          <div className="font-bold text-[#111827]">
+                            {rec.externalRefId} · {rec.date}
                           </div>
-                          <div className="text-[11px] text-slate-500 truncate">
-                            {rec.notes}
+                          <div className="text-[11px] text-[#4B5563] truncate">
+                            {rec.clientName}
                           </div>
                         </div>
-
-                        <div className="text-right shrink-0">
-                          <span
-                            className={`font-medium ${
-                              rec.syncStatus === 'Synced'
-                                ? 'text-emerald-700'
-                                : rec.sourceStatus === 'Corrected in Source'
-                                ? 'text-blue-700'
-                                : 'text-amber-700'
-                            }`}
-                          >
-                            {rec.sourceStatus}
-                          </span>
-                          <span className="block text-[11px] font-mono text-slate-500">
-                            {rec.syncStatus}
-                          </span>
-                        </div>
+                        <span className="text-[11px] font-semibold text-[#B85D2B] shrink-0">
+                          Pending Geo-Tag
+                        </span>
                       </div>
                     ))}
                   </div>
                 </div>
+              )}
 
-                {/* Primary 2-Step BA Source Correction & Targeted Re-Sync Actions */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {/* SINGLE Clear Action Box */}
+              {!activeDispute.reSynced ? (
+                <div className="p-5 rounded-[24px] bg-[#F4F5F7] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="text-xs font-semibold text-[#B85D2B]">
+                      Verification Pending
+                    </div>
+                    <div className="text-sm font-semibold text-[#111827] mt-0.5">
+                      Approve held meetings in {activeDispute.sourceTool} &
+                      recalculate (+₹{activeDispute.financialImpact})
+                    </div>
+                  </div>
+
                   <button
-                    onClick={handleSimulateCorrection}
-                    disabled={
-                      busyAction !== null ||
-                      activeDispute.sourceCorrected ||
-                      activeDispute.reSynced
-                    }
-                    className="inline-flex items-center justify-center gap-2 px-4 py-3 text-xs font-semibold text-white bg-slate-900 rounded-xl hover:bg-slate-800 transition-colors disabled:opacity-50 cursor-pointer"
+                    type="button"
+                    onClick={handleFixAndRecalculate}
+                    disabled={busy}
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 text-xs font-semibold text-white bg-[#09090B] hover:bg-[#1F2937] rounded-full transition-colors disabled:opacity-50 cursor-pointer shrink-0 shadow-xs"
                   >
-                    {busyAction === 'correct' ? (
+                    {busy ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : activeDispute.sourceCorrected ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                     ) : (
                       <Wrench className="w-4 h-4" />
                     )}
                     <span>
-                      {activeDispute.sourceCorrected
-                        ? `1. Source Corrected in ${activeDispute.sourceTool}`
-                        : `1. SIMULATE SOURCE CORRECTION (${activeDispute.sourceTool})`}
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={handleTargetedReSync}
-                    disabled={
-                      busyAction !== null ||
-                      !activeDispute.sourceCorrected ||
-                      activeDispute.reSynced
-                    }
-                    className="inline-flex items-center justify-center gap-2 px-4 py-3 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer"
-                  >
-                    {busyAction === 'resync' ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : activeDispute.reSynced ? (
-                      <CheckCircle2 className="w-4 h-4" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4" />
-                    )}
-                    <span>
-                      {activeDispute.reSynced
-                        ? `2. Re-Synced & Recalculated (₹${linkedStmt?.netAmount.toLocaleString('en-IN')})`
-                        : '2. TRIGGER TARGETED RE-SYNC & RECALCULATE'}
+                      Sync {activeDispute.sourceTool} & Recalculate (+₹
+                      {activeDispute.financialImpact})
                     </span>
                   </button>
                 </div>
-              </div>
-
-              {/* Footer Workflow Status Controls */}
-              <div className="pt-4 border-t border-slate-200 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-slate-700">
-                    Manual Ticket Workflow State:
-                  </span>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {[
-                      'Open',
-                      'Under Review',
-                      'Clarification Required',
-                      'Approved',
-                      'Rejected',
-                      'Resolved',
-                    ].map((st) => (
-                      <button
-                        key={st}
-                        onClick={() => handleStatusChange(st)}
-                        disabled={busyAction !== null}
-                        className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer ${
-                          activeDispute.status === st
-                            ? 'bg-slate-900 text-white border-slate-900'
-                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        {st}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {activeDispute.reSynced && linkedStmt && (
-                  <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200 flex items-center justify-between gap-3">
-                    <div className="text-xs text-emerald-950">
-                      <strong>Recalculation Complete:</strong> {linkedStmt.employeeName}{' '}
-                      updated to <strong>{linkedStmt.eligibleLocalMeetings} meetings</strong>{' '}
-                      and <strong>₹{linkedStmt.netAmount.toLocaleString('en-IN')}</strong>.
+              ) : (
+                <div className="p-5 rounded-[24px] bg-[#CDE5D0]/70 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#2EAF53] text-white flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="w-5 h-5" />
                     </div>
-                    <button
-                      onClick={() => {
-                        setSelectedEmployeeId(linkedStmt.employeeId);
-                        setActiveRole(UserRole.HR);
-                        setActiveSection(NavSection.HR_APPROVAL_LOCK);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 transition-colors shrink-0 cursor-pointer"
-                    >
-                      <span>Proceed to HR Approval & Lock</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                    <div>
+                      <div className="text-sm font-bold text-[#111827]">
+                        Synced in {activeDispute.sourceTool} & Recalculated
+                      </div>
+                      <div className="text-xs text-[#2E7D32] font-medium mt-0.5">
+                        Updated Payout: ₹
+                        {linkedStmt?.netAmount.toLocaleString('en-IN')} ·
+                        Awaiting HR Exception Approval
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    {nextOpenDispute && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDisputeId(nextOpenDispute.id);
+                          setSelectedEmployeeId(nextOpenDispute.employeeId);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-[#111827] bg-white hover:bg-[#F4F5F7] rounded-full transition-colors cursor-pointer"
+                      >
+                        <Wrench className="w-3.5 h-3.5" />
+                        <span>Resolve {nextOpenDispute.employeeName}</span>
+                      </button>
+                    )}
+
+                    {linkedStmt && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedEmployeeId(linkedStmt.employeeId);
+                          setActiveRole(UserRole.HR);
+                          setActiveSection(NavSection.HR_APPROVAL_LOCK);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-5 py-2.5 text-xs font-semibold text-white bg-[#09090B] hover:bg-[#1F2937] rounded-full transition-colors cursor-pointer"
+                      >
+                        <span>Approve Exception Payout</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
-            <div className="py-16 text-center text-sm text-slate-500">
-              No dispute tickets match the current filter.
+            <div className="py-16 text-center text-sm font-medium text-[#9CA3AF]">
+              Select a dispute to review.
             </div>
           )}
         </div>

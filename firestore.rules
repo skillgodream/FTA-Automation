@@ -207,10 +207,7 @@ service cloud.firestore {
       allow create: if isVerifiedUser() && isValidId(recordId) && isValidSourceRecord(incoming());
       allow update: if isVerifiedUser() && isValidId(recordId) && isValidSourceRecord(incoming()) && isOwner(existing()) && (
         incoming().id == existing().id &&
-        incoming().ownerId == existing().ownerId &&
-        incoming().diff(existing()).affectedKeys().hasOnly([
-          'sourceStatus', 'syncStatus', 'notes', 'ticketRef', 'updatedAt'
-        ])
+        incoming().ownerId == existing().ownerId
       );
       allow delete: if isVerifiedUser() && isValidId(recordId) && isOwner(existing());
     }
@@ -228,7 +225,7 @@ service cloud.firestore {
       isValidId(data.id) &&
       data.name is string && data.name.size() <= 80 &&
       data.toolType is string && data.toolType.size() <= 60 &&
-      data.status is string && data.status.size() <= 40 &&
+      data.status is string && data.status.size() <= 60 &&
       data.lastSyncTime is string && data.lastSyncTime.size() <= 60 &&
       data.recordsFetched is number &&
       data.recordsSuccessful is number &&
@@ -244,10 +241,7 @@ service cloud.firestore {
       allow create: if isVerifiedUser() && isValidId(connectorId) && isValidSyncConnector(incoming());
       allow update: if isVerifiedUser() && isValidId(connectorId) && isValidSyncConnector(incoming()) && isOwner(existing()) && (
         incoming().id == existing().id &&
-        incoming().ownerId == existing().ownerId &&
-        incoming().diff(existing()).affectedKeys().hasOnly([
-          'status', 'lastSyncTime', 'recordsFetched', 'recordsSuccessful', 'recordsFailed', 'updatedAt'
-        ])
+        incoming().ownerId == existing().ownerId
       );
       allow delete: if isVerifiedUser() && isValidId(connectorId) && isOwner(existing());
     }
@@ -294,7 +288,7 @@ service cloud.firestore {
       data.newLaunchRate is number &&
       data.newLaunchAmount is number &&
       data.outstationDays is number &&
-      data.outstationRateType is string && data.outstationRateType.size() <= 80 &&
+      data.outstationRateType is string && data.outstationRateType.size() <= 120 &&
       data.outstationDailyRate is number &&
       data.outstationAmount is number &&
       data.grossAmount is number &&
@@ -322,15 +316,7 @@ service cloud.firestore {
       allow create: if isVerifiedUser() && isValidId(statementId) && isValidStatement(incoming());
       allow update: if isVerifiedUser() && isValidId(statementId) && isValidStatement(incoming()) && isOwner(existing()) && (
         incoming().id == existing().id &&
-        incoming().ownerId == existing().ownerId &&
-        incoming().diff(existing()).affectedKeys().hasOnly([
-          'eligibleLocalMeetings', 'localRate', 'localAmount', 'newLaunchMeetings',
-          'newLaunchRuleExcluded', 'newLaunchRate', 'newLaunchAmount', 'outstationDays',
-          'outstationRateType', 'outstationDailyRate', 'outstationAmount', 'grossAmount',
-          'maxClaimLimit', 'capApplied', 'netAmount', 'calculationTrace', 'status',
-          'payoutLocked', 'lockVersion', 'changeRequestStatus', 'changeRequestReason',
-          'disputeTicketId', 'payoutBatchId', 'payoutStatus', 'utrNumber', 'updatedAt'
-        ])
+        incoming().ownerId == existing().ownerId
       );
       allow delete: if isVerifiedUser() && isValidId(statementId) && isOwner(existing());
     }
@@ -388,11 +374,7 @@ service cloud.firestore {
       allow create: if isVerifiedUser() && isValidId(disputeId) && isValidDispute(incoming());
       allow update: if isVerifiedUser() && isValidId(disputeId) && isValidDispute(incoming()) && isOwner(existing()) && (
         incoming().id == existing().id &&
-        incoming().ownerId == existing().ownerId &&
-        incoming().createdAt == existing().createdAt &&
-        incoming().diff(existing()).affectedKeys().hasOnly([
-          'status', 'sourceCorrected', 'reSynced', 'resolutionNotes', 'updatedAt'
-        ])
+        incoming().ownerId == existing().ownerId
       );
       allow delete: if isVerifiedUser() && isValidId(disputeId) && isOwner(existing());
     }

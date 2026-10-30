@@ -1,7 +1,6 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode, useState } from 'react';
 import { FtaProvider, useFta } from './context/FtaContext';
 import { NavSection, UserRole } from './types/fta';
-import { RahulJourneyBar } from './components/RahulJourneyBar';
 import { HrCommandCentreView } from './components/views/HrCommandCentreView';
 import { EmployeeStatementsView } from './components/views/EmployeeStatementsView';
 import { BaDisputeWorkspaceView } from './components/views/BaDisputeWorkspaceView';
@@ -12,18 +11,23 @@ import { EmployeeMasterView } from './components/views/EmployeeMasterView';
 import { RateCityMasterView } from './components/views/RateCityMasterView';
 import { AuditReportsView } from './components/views/AuditReportsView';
 import {
-  LayoutDashboard,
+  Home,
   FileText,
-  AlertTriangle,
+  Wrench,
   Database,
-  Lock,
+  CheckCircle2,
   Landmark,
   Users,
   Sliders,
   History,
-  LogOut,
-  ShieldCheck,
   Loader2,
+  ShieldCheck,
+  ArrowRight,
+  RotateCcw,
+  ChevronDown,
+  Play,
+  Menu,
+  X,
 } from 'lucide-react';
 
 interface ErrorBoundaryState {
@@ -45,25 +49,22 @@ class FtaErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught application error:', error, errorInfo);
+    console.error('Application error:', error, errorInfo);
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-[#FAF9F5] flex items-center justify-center p-6">
-          <div className="max-w-lg w-full bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-            <h2 className="text-lg font-bold text-slate-900">
-              Application State Notice
+        <div className="min-h-screen bg-[#F4F5F7] flex items-center justify-center p-6">
+          <div className="max-w-sm w-full bg-white rounded-[28px] p-6 space-y-4 shadow-xs">
+            <h2 className="text-lg font-bold text-[#111827]">
+              View Interrupted
             </h2>
-            <pre className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 overflow-x-auto whitespace-pre-wrap">
-              {this.state.errorMessage}
-            </pre>
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 text-xs font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 cursor-pointer"
+              className="px-5 py-2.5 text-xs font-semibold text-white bg-[#09090B] rounded-full hover:bg-neutral-800 cursor-pointer"
             >
-              Reload Workspace
+              Reload
             </button>
           </div>
         </div>
@@ -73,66 +74,12 @@ class FtaErrorBoundary extends Component<
   }
 }
 
-const NAV_ITEMS: Array<{
-  id: NavSection;
-  label: string;
-  shortLabel: string;
-  icon: React.ComponentType<{ className?: string }>;
-}> = [
-  {
-    id: NavSection.HR_COMMAND,
-    label: '1. HR Command Centre',
-    shortLabel: 'Command Centre',
-    icon: LayoutDashboard,
-  },
-  {
-    id: NavSection.EMPLOYEE_STATEMENTS,
-    label: '2. Employee Statements',
-    shortLabel: 'Statements',
-    icon: FileText,
-  },
-  {
-    id: NavSection.BA_DISPUTES,
-    label: '3. BA Dispute Management',
-    shortLabel: 'BA Disputes',
-    icon: AlertTriangle,
-  },
-  {
-    id: NavSection.SOURCE_INTEGRATION,
-    label: '4. Source Data & Integration',
-    shortLabel: 'Source Sync',
-    icon: Database,
-  },
-  {
-    id: NavSection.HR_APPROVAL_LOCK,
-    label: '5. HR Approval & Payout Lock',
-    shortLabel: 'HR Lock',
-    icon: Lock,
-  },
-  {
-    id: NavSection.FINANCE_DISBURSEMENT,
-    label: '6. Finance Disbursement',
-    shortLabel: 'Finance',
-    icon: Landmark,
-  },
-  {
-    id: NavSection.EMPLOYEE_MASTER,
-    label: '7. Employee Master',
-    shortLabel: 'Employees',
-    icon: Users,
-  },
-  {
-    id: NavSection.RATE_CITY_MASTER,
-    label: '8. Rate & City Master',
-    shortLabel: 'Rates & Cities',
-    icon: Sliders,
-  },
-  {
-    id: NavSection.AUDIT_REPORTS,
-    label: '9. Audit & Reports',
-    shortLabel: 'Audit Logs',
-    icon: History,
-  },
+const ROLES: UserRole[] = [
+  UserRole.HR,
+  UserRole.EMPLOYEE,
+  UserRole.BA,
+  UserRole.FINANCE,
+  UserRole.HR_ADMIN,
 ];
 
 const FtaWorkspaceShell: React.FC = () => {
@@ -145,18 +92,83 @@ const FtaWorkspaceShell: React.FC = () => {
     setActiveRole,
     activeSection,
     setActiveSection,
+    setSelectedEmployeeId,
+    signIn,
+    signInDirectEnterprise,
+    resetRahulDemoScenario,
     disputes,
     statements,
-    signIn,
-    signOut,
+    raiseEmployeeDispute,
+    triggerTargetedReSync,
+    lockStatementPayout,
+    createPayoutBatchForLocked,
   } = useFta();
+
+  const [stepBusy, setStepBusy] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const openDisputesCount = disputes.filter(
+    (d) => d.status !== 'Resolved'
+  ).length;
+  const pendingApprovalCount = statements.filter((s) => !s.payoutLocked).length;
+
+  const rahulStmt = statements.find((s) => s.employeeId === 'EMP-1001');
+  const rahulDispute = disputes.find((d) => d.employeeId === 'EMP-1001');
+
+  const step3Done =
+    Boolean(rahulDispute) || (rahulStmt?.eligibleLocalMeetings ?? 0) >= 42;
+  const step4Done = Boolean(
+    rahulDispute?.reSynced || (rahulStmt?.eligibleLocalMeetings ?? 0) >= 42
+  );
+  const step5Done = Boolean(rahulStmt?.payoutLocked);
+  const step6Done = rahulStmt?.payoutStatus === 'Success';
+
+  const nextActionStep = !step3Done
+    ? 3
+    : !step4Done
+    ? 4
+    : !step5Done
+    ? 5
+    : !step6Done
+    ? 6
+    : null;
+
+  const handleRunNextStep = async () => {
+    if (!nextActionStep || !rahulStmt || stepBusy) return;
+    setStepBusy(true);
+    try {
+      setSelectedEmployeeId('EMP-1001');
+      if (nextActionStep === 3) {
+        setActiveRole(UserRole.EMPLOYEE);
+        setActiveSection(NavSection.EMPLOYEE_STATEMENTS);
+        await raiseEmployeeDispute(
+          rahulStmt.id,
+          'I completed 42 meetings, but the system shows only 40.'
+        );
+      } else if (nextActionStep === 4) {
+        setActiveRole(UserRole.BA);
+        setActiveSection(NavSection.BA_DISPUTES);
+        await triggerTargetedReSync(rahulDispute?.id || 'DSP-1042');
+      } else if (nextActionStep === 5) {
+        setActiveRole(UserRole.HR);
+        setActiveSection(NavSection.HR_APPROVAL_LOCK);
+        await lockStatementPayout(rahulStmt.id);
+      } else if (nextActionStep === 6) {
+        setActiveRole(UserRole.FINANCE);
+        setActiveSection(NavSection.FINANCE_DISBURSEMENT);
+        await createPayoutBatchForLocked([rahulStmt.id]);
+      }
+    } finally {
+      setStepBusy(false);
+    }
+  };
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#FAF9F5] flex items-center justify-center">
-        <div className="flex items-center gap-3 text-sm font-medium text-slate-700">
-          <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-          <span>Initializing FTA Automation Platform...</span>
+      <div className="h-screen bg-[#F4F5F7] flex items-center justify-center">
+        <div className="flex items-center gap-2.5 text-sm font-semibold text-[#111827]">
+          <Loader2 className="w-4 h-4 animate-spin text-[#7C3AED]" />
+          <span>FTACONNEX.</span>
         </div>
       </div>
     );
@@ -164,297 +176,335 @@ const FtaWorkspaceShell: React.FC = () => {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#FAF9F5] flex flex-col justify-between">
-        {/* Clean 3-Zone Top Bar Contract */}
-        <header className="flex items-center justify-between gap-8 px-8 py-4 bg-white border-b border-slate-200">
+      <div className="min-h-screen bg-[#F4F5F7] flex flex-col justify-between">
+        <header className="flex items-center justify-between gap-8 px-8 py-5">
           <a
             href="#top"
-            className="text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0"
+            className="text-2xl font-black tracking-tight whitespace-nowrap shrink-0"
           >
-            FTA Automation Platform
+            <span className="text-[#111827]">FTA</span>
+            <span className="text-[#C3B3F2]">CONNEX.</span>
           </a>
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
-            <a
-              href="#pipeline"
-              className="hover:text-slate-900 transition-colors whitespace-nowrap shrink-0"
-            >
-              Pipeline Architecture
-            </a>
-            <a
-              href="#rules"
-              className="hover:text-slate-900 transition-colors whitespace-nowrap shrink-0"
-            >
-              Calculation Engine
-            </a>
-            <a
-              href="#disputes"
-              className="hover:text-slate-900 transition-colors whitespace-nowrap shrink-0"
-            >
-              Dispute Routing
-            </a>
-            <a
-              href="#demo"
-              className="hover:text-slate-900 transition-colors whitespace-nowrap shrink-0"
-            >
-              Rahul Sharma Scenario
-            </a>
-          </nav>
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              onClick={signIn}
-              className="px-4 py-2 text-xs font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              Sign In with Google
-            </button>
-          </div>
+          <button
+            onClick={() => signInDirectEnterprise(UserRole.HR)}
+            className="px-5 py-2.5 text-xs font-semibold text-white bg-[#09090B] rounded-full hover:bg-neutral-800 transition-colors cursor-pointer"
+          >
+            Sign In
+          </button>
         </header>
 
-        {/* Main Enterprise Sign-In Hero */}
-        <main className="max-w-5xl mx-auto px-6 py-16 space-y-12">
-          <div className="bg-white border border-slate-200 rounded-2xl p-8 md:p-12 space-y-6">
-            <div className="text-xs font-medium text-blue-700">
-              Enterprise Field Travel Allowance (FTA) Governance Suite
+        <main className="flex-1 flex items-center justify-center px-6 py-12">
+          <div className="max-w-sm w-full bg-white rounded-[28px] p-8 space-y-6 shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-[#6B7280]">
+                Field Travel Allowance
+              </div>
+              <h1 className="text-3xl font-bold text-[#111827] tracking-tight">
+                Zero-Touch by Default.
+              </h1>
+              <p className="text-xs text-[#6B7280]">
+                Auto-pull meetings · Auto-calculate payout · Human intervention
+                only on disputes.
+              </p>
             </div>
-            <h1
-              className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight max-w-2xl"
-              style={{ textWrap: 'balance' }}
-            >
-              Automated Field Travel Allowance Calculation, BA Dispute Routing &
-              Payout Lock
-            </h1>
-            <p className="text-sm text-slate-600 max-w-2xl leading-relaxed">
-              End-to-end financial integrity from Prowl, LeadSquared, and
-              Regional Trainer CSV sync to deterministic allowance calculation,
-              employee statement confirmation, Gemini-assisted dispute
-              classification, source-only correction, HR final payout lock, and
-              Finance disbursement.
-            </p>
 
-            <div className="pt-2 flex flex-wrap items-center gap-4">
+            <div className="space-y-2.5">
+              <button
+                onClick={() => signInDirectEnterprise(UserRole.HR)}
+                className="w-full flex items-center justify-center gap-2 px-5 py-3 text-xs font-semibold text-white bg-[#09090B] rounded-full hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                <span>Launch Workspace</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
               <button
                 onClick={signIn}
-                className="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 px-5 py-3 text-xs font-semibold text-[#111827] bg-[#F4F5F7] hover:bg-[#E5E7EB] rounded-full transition-colors cursor-pointer"
               >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Authenticate with Google to Launch Platform</span>
+                <ShieldCheck className="w-4 h-4 text-[#111827]" />
+                <span>Sign In with Google</span>
               </button>
-              <span className="text-xs text-slate-500">
-                Automatically provisions 20 employees & the live Rahul Sharma
-                BD Manager scenario.
-              </span>
-            </div>
-          </div>
-
-          <div
-            id="pipeline"
-            className="grid grid-cols-1 md:grid-cols-3 gap-5 text-xs"
-          >
-            <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-2">
-              <div className="font-semibold text-slate-900 text-sm">
-                01. Deterministic Calculation Engine
-              </div>
-              <p className="text-slate-600 leading-relaxed">
-                Zero AI in financial math. Computes Local Meetings, New Launch
-                (₹50 with New-City Outstation Rule), Special City Outstation
-                (₹1,200/day), Own-Vehicle rates (₹500 Tier 1 / ₹400 Tier 2-3),
-                and Designation Max Claim Caps.
-              </p>
-            </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-2">
-              <div className="font-semibold text-slate-900 text-sm">
-                02. Source-Only BA Dispute Governance
-              </div>
-              <p className="text-slate-600 leading-relaxed">
-                Gemini 3.8 Flash interprets natural-language employee dispute
-                replies and routes tickets to the regional BA. Direct meeting
-                count overwrites are blocked—corrections must occur in Prowl or
-                LeadSquared followed by Targeted Re-Sync.
-              </p>
-            </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-2">
-              <div className="font-semibold text-slate-900 text-sm">
-                03. Final Payout Lock & Reconciliation
-              </div>
-              <p className="text-slate-600 leading-relaxed">
-                HR applies a version-controlled Final Payout Lock before Finance
-                batching. Prevents duplicate disbursements and maintains an
-                append-only immutable Firestore audit trail.
-              </p>
             </div>
           </div>
         </main>
-
-        <footer className="px-8 py-5 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between bg-white">
-          <span>FTA Automation Platform · Enterprise Financial Governance</span>
-          <span>Simulated External Connectors (Prowl · LeadSquared · RazorpayX)</span>
-        </footer>
       </div>
     );
   }
 
-  const currentNavObj =
-    NAV_ITEMS.find((n) => n.id === activeSection) || NAV_ITEMS[0];
-  const openDisputeCount = disputes.filter((d) => d.status !== 'Resolved').length;
-  const lockedCount = statements.filter((s) => s.payoutLocked).length;
+  const flowNavItems = [
+    {
+      id: NavSection.SOURCE_INTEGRATION,
+      label: 'Meeting Sync',
+      icon: Database,
+      role: UserRole.HR,
+    },
+    {
+      id: NavSection.RATE_CITY_MASTER,
+      label: 'Rate & City Rules',
+      icon: Sliders,
+      role: UserRole.HR,
+    },
+    {
+      id: NavSection.EMPLOYEE_STATEMENTS,
+      label: 'Employee Statements',
+      icon: FileText,
+      role: UserRole.EMPLOYEE,
+    },
+    {
+      id: NavSection.BA_DISPUTES,
+      label: 'Dispute Resolution',
+      icon: Wrench,
+      role: UserRole.BA,
+      badge: openDisputesCount > 0 ? String(openDisputesCount) : undefined,
+    },
+    {
+      id: NavSection.HR_APPROVAL_LOCK,
+      label: 'Exception Approvals',
+      icon: CheckCircle2,
+      role: UserRole.HR,
+      badge:
+        pendingApprovalCount > 0 ? String(pendingApprovalCount) : undefined,
+    },
+    {
+      id: NavSection.FINANCE_DISBURSEMENT,
+      label: 'Bank Disbursement',
+      icon: Landmark,
+      role: UserRole.FINANCE,
+    },
+  ];
 
-  return (
-    <div className="min-h-screen bg-[#FAF9F5] flex flex-col">
-      {/* Strict 3-Zone Top Header Contract */}
-      <header className="flex items-center justify-between gap-8 px-6 py-3.5 bg-white border-b border-slate-200 sticky top-0 z-30">
-        {/* Zone 1: Single text element wordmark */}
-        <a
-          href="#top"
-          onClick={(e) => {
-            e.preventDefault();
-            setActiveSection(NavSection.HR_COMMAND);
-          }}
-          className="text-base font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0"
-        >
-          FTA Automation Platform
-        </a>
+  const directoryNavItems = [
+    {
+      id: NavSection.EMPLOYEE_MASTER,
+      label: 'Field Employees',
+      icon: Users,
+      role: UserRole.HR,
+    },
+    {
+      id: NavSection.AUDIT_REPORTS,
+      label: 'Audit Trail',
+      icon: History,
+      role: UserRole.HR,
+    },
+  ];
 
-        {/* Zone 2: 5 concise single-line navigation links */}
-        <nav className="hidden lg:flex items-center gap-6 text-xs font-medium text-slate-600">
-          {NAV_ITEMS.slice(0, 5).map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveSection(item.id)}
-              className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                activeSection === item.id
-                  ? 'text-blue-600 font-semibold underline underline-offset-4'
-                  : ''
-              }`}
-            >
-              {item.shortLabel}
-            </button>
-          ))}
-        </nav>
-
-        {/* Zone 3: 1 primary action */}
-        <div className="flex items-center gap-3 shrink-0">
+  const renderSidebarContent = () => (
+    <div className="flex flex-col justify-between h-full p-5">
+      <div className="space-y-6">
+        {/* Brand Wordmark */}
+        <div className="flex items-center justify-between px-2 pt-1">
           <button
-            onClick={signOut}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-slate-800 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            onClick={() => {
+              setActiveSection(NavSection.HR_COMMAND);
+              setMobileMenuOpen(false);
+            }}
+            className="text-2xl font-black tracking-tight cursor-pointer flex items-center select-none"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
+            <span className="text-[#111827]">FTA</span>
+            <span className="text-[#C3B3F2]">CONNEX.</span>
+          </button>
+
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            className="lg:hidden p-1.5 rounded-full hover:bg-[#F4F5F7] text-[#111827]"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
-      </header>
 
-      {/* Live Rahul Sharma End-to-End Demo Stepper Bar */}
-      <RahulJourneyBar />
+        {/* Overview Button */}
+        <div>
+          <button
+            onClick={() => {
+              setActiveRole(UserRole.HR);
+              setActiveSection(NavSection.HR_COMMAND);
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full px-4 py-3 rounded-2xl text-[13px] transition-all flex items-center gap-3 cursor-pointer ${
+              activeSection === NavSection.HR_COMMAND
+                ? 'bg-[#09090B] text-white font-semibold shadow-xs'
+                : 'text-[#374151] hover:bg-[#F4F5F7] font-medium'
+            }`}
+          >
+            <Home className="w-4 h-4 shrink-0" />
+            <span>Overview</span>
+          </button>
+        </div>
 
-      {/* Workspace Body: Left Sidebar (260px) + Main Content Viewport */}
-      <div className="flex-1 flex flex-col lg:flex-row max-w-[1440px] w-full mx-auto">
-        {/* Left Navigation Sidebar */}
-        <aside className="w-full lg:w-[260px] shrink-0 bg-white lg:border-r border-b lg:border-b-0 border-slate-200 p-4 flex flex-col justify-between gap-6">
-          <div className="space-y-5">
-            {/* Active Enterprise Role Switcher (In Workspace Sidebar Toolbar) */}
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
-              <label className="block text-[11px] font-semibold text-slate-500">
-                Active Operator Role
-              </label>
-              <select
-                value={activeRole}
-                onChange={(e) => setActiveRole(e.target.value as UserRole)}
-                className="w-full px-2.5 py-1.5 text-xs font-semibold text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-blue-600"
+        {/* Operations & Payout Workflow */}
+        <div className="space-y-1.5">
+          <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF]">
+            Payout Operations
+          </div>
+          {flowNavItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeSection === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  if (item.role) setActiveRole(item.role);
+                  setActiveSection(item.id);
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full px-3.5 py-2.5 rounded-2xl text-[13px] transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                  isActive
+                    ? 'bg-[#D8CEF8] text-[#111827] font-semibold'
+                    : 'text-[#374151] hover:bg-[#F4F5F7] font-medium'
+                }`}
               >
-                {Object.values(UserRole).map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </select>
-              <div className="text-[11px] text-slate-500 truncate">
-                Signed in: {user.email}
-              </div>
-            </div>
+                <div className="flex items-center gap-2.5 truncate">
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </div>
+                {item.badge && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-[#EFE0D6] text-[#B85D2B] shrink-0">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-            {/* 9 Core Navigation Modules */}
-            <div className="space-y-1">
-              <div className="px-2.5 pb-1 text-[11px] font-semibold text-slate-400">
-                Platform Workspaces
-              </div>
-              {NAV_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const active = activeSection === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveSection(item.id)}
-                    className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
-                      active
-                        ? 'bg-slate-900 text-white'
-                        : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2.5 truncate">
-                      <Icon className="w-4 h-4 shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </span>
-                    {item.id === NavSection.BA_DISPUTES && openDisputeCount > 0 && (
-                      <span
-                        className={`font-mono text-[11px] ${
-                          active ? 'text-amber-300' : 'text-amber-700 font-semibold'
-                        }`}
-                      >
-                        {openDisputeCount}
-                      </span>
-                    )}
-                    {item.id === NavSection.HR_APPROVAL_LOCK && (
-                      <span
-                        className={`font-mono text-[11px] ${
-                          active ? 'text-emerald-300' : 'text-emerald-700 font-semibold'
-                        }`}
-                      >
-                        {lockedCount}/20
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+        {/* Directory & Audit */}
+        <div className="space-y-1.5">
+          <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF]">
+            Records
+          </div>
+          {directoryNavItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeSection === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  if (item.role) setActiveRole(item.role);
+                  setActiveSection(item.id);
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full px-3.5 py-2.5 rounded-2xl text-[13px] transition-all flex items-center gap-2.5 cursor-pointer ${
+                  isActive
+                    ? 'bg-[#D8CEF8] text-[#111827] font-semibold'
+                    : 'text-[#374151] hover:bg-[#F4F5F7] font-medium'
+                }`}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Bottom Profile & Reset Controls */}
+      <div className="pt-4 border-t border-[#F1F2F6] space-y-2.5">
+        <div className="relative flex items-center rounded-2xl bg-[#F4F5F7] px-2.5 py-2">
+          <div className="w-8 h-8 rounded-full bg-[#D8CEF8] text-[#4C1D95] font-bold text-xs flex items-center justify-center shrink-0">
+            VR
+          </div>
+          <select
+            value={activeRole}
+            onChange={(e) => setActiveRole(e.target.value as UserRole)}
+            aria-label="Select Role"
+            className="appearance-none bg-transparent pl-2.5 pr-6 py-1 text-xs font-semibold text-[#111827] focus:outline-none cursor-pointer w-full"
+          >
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                Vikram · {r}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="w-3.5 h-3.5 text-[#111827] pointer-events-none absolute right-3" />
+        </div>
+
+        <button
+          onClick={resetRahulDemoScenario}
+          disabled={seeding || stepBusy}
+          className="w-full py-2 px-3 rounded-2xl border border-[#E5E7EB] hover:bg-[#F4F5F7] text-xs font-semibold text-[#374151] flex items-center justify-center gap-2 transition-colors cursor-pointer"
+        >
+          <RotateCcw
+            className={`w-3.5 h-3.5 ${
+              seeding || dataLoading ? 'animate-spin' : ''
+            }`}
+          />
+          <span>Reset Cycle Data</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#F4F5F7] text-[#111827] flex">
+      {/* Desktop Left Sidebar */}
+      <aside className="hidden lg:block w-64 bg-white border-r border-[#E5E7EB]/80 shrink-0 sticky top-0 h-screen">
+        {renderSidebarContent()}
+      </aside>
+
+      {/* Mobile Sidebar Drawer */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          <div
+            className="fixed inset-0 bg-black/30"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <aside className="relative w-64 bg-white h-full z-10 shadow-xl">
+            {renderSidebarContent()}
+          </aside>
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Clean Top Utility Bar */}
+        <header className="bg-[#F4F5F7] px-5 sm:px-8 py-4 flex items-center justify-between gap-4 border-b border-[#E5E7EB]/70">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-full bg-white text-[#111827] shadow-2xs"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+            <div className="text-xs font-medium text-[#6B7280] hidden sm:block">
+              October 2026 Payout Cycle · 5 Field Employees
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500 space-y-1">
-            <div className="font-semibold text-slate-800">
-              Governance Mode Active
-            </div>
-            <div>
-              • Deterministic Financial Rules
-              <br />• Source-Only BA Corrections
-              <br />• Immutable Firestore Audit Log
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Viewport */}
-        <main className="flex-1 p-6 lg:p-8 min-w-0">
-          {/* Contextual Breadcrumb Bar */}
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-4">
-            <div className="flex items-center gap-2">
-              <span>FTA Platform</span>
-              <span aria-hidden="true">/</span>
-              <span className="font-medium text-slate-900">
-                {currentNavObj.label}
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>Role: {activeRole}</span>
-            </div>
-            {(dataLoading || seeding) && (
-              <div className="flex items-center gap-1.5 text-blue-600 font-medium">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Synchronizing Firestore state...</span>
-              </div>
+          <div className="flex items-center gap-2.5 shrink-0">
+            {nextActionStep !== null && (
+              <button
+                onClick={handleRunNextStep}
+                disabled={stepBusy || seeding}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#09090B] hover:bg-neutral-800 rounded-full transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+              >
+                {stepBusy ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Play className="w-3 h-3 fill-white" />
+                )}
+                <span>
+                  {nextActionStep === 3
+                    ? 'Submit Rahul Dispute'
+                    : nextActionStep === 4
+                    ? 'Sync Prowl & Recalculate'
+                    : nextActionStep === 5
+                    ? 'Approve Rahul Payout'
+                    : 'Disburse Rahul Payout'}
+                </span>
+              </button>
             )}
           </div>
+        </header>
 
+        {/* Main Viewport */}
+        <main className="flex-1 max-w-[1240px] w-full mx-auto px-5 sm:px-8 py-6">
           {activeSection === NavSection.HR_COMMAND && <HrCommandCentreView />}
           {activeSection === NavSection.EMPLOYEE_STATEMENTS && (
             <EmployeeStatementsView />
           )}
-          {activeSection === NavSection.BA_DISPUTES && <BaDisputeWorkspaceView />}
+          {activeSection === NavSection.BA_DISPUTES && (
+            <BaDisputeWorkspaceView />
+          )}
           {activeSection === NavSection.SOURCE_INTEGRATION && (
             <SourceIntegrationView />
           )}
@@ -464,7 +514,9 @@ const FtaWorkspaceShell: React.FC = () => {
           {activeSection === NavSection.FINANCE_DISBURSEMENT && (
             <FinanceDisbursementView />
           )}
-          {activeSection === NavSection.EMPLOYEE_MASTER && <EmployeeMasterView />}
+          {activeSection === NavSection.EMPLOYEE_MASTER && (
+            <EmployeeMasterView />
+          )}
           {activeSection === NavSection.RATE_CITY_MASTER && (
             <RateCityMasterView />
           )}

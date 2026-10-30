@@ -3,11 +3,8 @@ import { useFta } from '../../context/FtaContext';
 import {
   Landmark,
   CheckCircle2,
-  ShieldCheck,
   Download,
   Loader2,
-  AlertOctagon,
-  Play,
 } from 'lucide-react';
 
 export const FinanceDisbursementView: React.FC = () => {
@@ -18,51 +15,48 @@ export const FinanceDisbursementView: React.FC = () => {
     advancePayoutBatchStatus,
   } = useFta();
 
-  const [selectedStmtIds, setSelectedStmtIds] = useState<string[]>([]);
-  const [busyBatchId, setBusyBatchId] = useState<string | null>(null);
+  const [filterTab, setFilterTab] = useState<'all' | 'ready' | 'paid'>('all');
+  const [busy, setBusy] = useState<boolean>(false);
 
-  // Eligible for new payout batch: payoutLocked === true AND not already in an active/completed batch
-  const eligibleForBatch = statements.filter(
-    (s) =>
-      s.payoutLocked &&
-      s.payoutStatus !== 'Success' &&
-      s.payoutStatus !== 'Processing' &&
-      s.payoutStatus !== 'Initiated'
+  const eligibleForDisbursement = statements.filter(
+    (s) => s.payoutLocked && s.payoutStatus !== 'Success'
   );
 
-  const alreadyBatchedOrPaid = statements.filter(
-    (s) =>
-      s.payoutStatus === 'Initiated' ||
-      s.payoutStatus === 'Processing' ||
-      s.payoutStatus === 'Success'
-  );
+  const filteredStatements = statements.filter((s) => {
+    if (filterTab === 'ready')
+      return s.payoutLocked && s.payoutStatus !== 'Success';
+    if (filterTab === 'paid') return s.payoutStatus === 'Success';
+    return true;
+  });
 
-  const handleToggleSelect = (id: string) => {
-    setSelectedStmtIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
-
-  const handleCreateBatch = async (idsToBatch: string[]) => {
-    if (idsToBatch.length === 0) return;
-    setBusyBatchId('CREATE');
+  // 1-Click Disburse All Approved Statements
+  const handleDisburseAllApproved = async () => {
+    setBusy(true);
     try {
-      await createPayoutBatchForLocked(idsToBatch);
-      setSelectedStmtIds([]);
+      const unbatchedIds = statements
+        .filter((s) => s.payoutLocked && s.payoutBatchId === 'NONE')
+        .map((s) => s.id);
+
+      if (unbatchedIds.length > 0) {
+        await createPayoutBatchForLocked(unbatchedIds);
+      }
+
+      for (const b of payoutBatches) {
+        if (b.status !== 'Success') {
+          await advancePayoutBatchStatus(b.id, 'Success');
+        }
+      }
     } finally {
-      setBusyBatchId(null);
+      setBusy(false);
     }
   };
 
-  const handleAdvanceStatus = async (
-    batchId: string,
-    target: 'Processing' | 'Success' | 'Failed'
-  ) => {
-    setBusyBatchId(`${batchId}-${target}`);
+  const handleCompleteSingleBatch = async (batchId: string) => {
+    setBusy(true);
     try {
-      await advancePayoutBatchStatus(batchId, target);
+      await advancePayoutBatchStatus(batchId, 'Success');
     } finally {
-      setBusyBatchId(null);
+      setBusy(false);
     }
   };
 
@@ -77,8 +71,7 @@ export const FinanceDisbursementView: React.FC = () => {
       'NewLaunchMeetings',
       'OutstationDays',
       'NetFTA_INR',
-      'PayoutLocked',
-      'LockVersion',
+      'Approved',
       'PayoutBatchID',
       'DisbursementStatus',
       'BankUTR',
@@ -95,7 +88,6 @@ export const FinanceDisbursementView: React.FC = () => {
         s.outstationDays,
         s.netAmount,
         s.payoutLocked,
-        `v${s.lockVersion}`,
         s.payoutBatchId,
         s.payoutStatus,
         s.utrNumber,
@@ -106,277 +98,228 @@ export const FinanceDisbursementView: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `FTA_Reconciliation_Report_2026_10.csv`;
+    a.download = `FTA_Disbursement_Report_2026_10.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 pb-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-medium text-slate-500">
-            Locked HR-Approved Batches · Simulated Payment Gateway · Duplicate Payout Guard · Reconciliation
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mt-1">
-            Finance Disbursement & Reconciliation
+          <p className="text-[13px] font-medium text-[#6B7280]">
+            NEFT / IMPS Bank Settlement & UTR Reconciliation
+          </p>
+          <h1 className="text-[26px] font-semibold text-[#111827] tracking-tight mt-0.5">
+            Bank Disbursement
           </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={() =>
-              handleCreateBatch(
-                selectedStmtIds.length > 0
-                  ? selectedStmtIds
-                  : eligibleForBatch.map((s) => s.id)
-              )
-            }
-            disabled={eligibleForBatch.length === 0 || busyBatchId !== null}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer"
+            onClick={handleDisburseAllApproved}
+            disabled={eligibleForDisbursement.length === 0 || busy}
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-[#09090B] rounded-full hover:bg-[#1F2937] transition-colors disabled:opacity-40 cursor-pointer"
           >
-            {busyBatchId === 'CREATE' ? (
+            {busy ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
               <Landmark className="w-3.5 h-3.5" />
             )}
             <span>
-              {selectedStmtIds.length > 0
-                ? `Generate Payout Batch (${selectedStmtIds.length} Selected)`
-                : `Generate Payout Batch for All Locked (${eligibleForBatch.length})`}
+              {eligibleForDisbursement.length > 0
+                ? `Disburse All Approved (${eligibleForDisbursement.length})`
+                : 'All Approved Payouts Disbursed'}
             </span>
           </button>
 
           <button
             onClick={handleDownloadReconciliationCsv}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-[#111827] bg-white border border-[#111827]/30 rounded-full hover:bg-white/80 transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Download Reconciliation CSV</span>
+            <span>Download Bank CSV</span>
           </button>
         </div>
       </div>
 
-      {/* Active Payout Batches & Simulated Gateway */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">
-              01. Simulated Payment Gateway Batches (RazorpayX Enterprise Payouts)
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Transition batches through Initiated → Processing → Success (Generates UTRs) or Failed.
-            </p>
-          </div>
-          <span className="text-xs font-medium text-emerald-800 flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4" />
-            <span>Duplicate Payout Guard Active</span>
-          </span>
-        </div>
-
-        {payoutBatches.length === 0 ? (
-          <div className="p-8 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-2">
-            <div className="text-sm font-medium text-slate-800">
-              No Payout Batches Generated Yet
-            </div>
-            <p className="text-xs text-slate-500">
-              Select locked HR-approved records below or click "Generate Payout Batch" to initiate disbursement.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {payoutBatches.map((batch) => {
-              const linkedStmts = statements.filter(
-                (s) => s.payoutBatchId === batch.batchNumber
-              );
-              return (
-                <div
-                  key={batch.id}
-                  className="p-5 rounded-xl border border-slate-200 bg-slate-50/60 flex flex-col justify-between space-y-4"
-                >
+      {/* Smart Payout Batch Cards */}
+      {payoutBatches.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {payoutBatches.map((batch) => {
+            const linkedStmts = statements.filter(
+              (s) => s.payoutBatchId === batch.batchNumber
+            );
+            return (
+              <div
+                key={batch.id}
+                className="bg-white rounded-[28px] p-6 flex flex-col justify-between gap-4 shadow-[0_4px_20px_rgba(17,24,39,0.03)]"
+              >
+                <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-mono font-bold text-slate-900">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="font-bold text-[#111827]">
                         {batch.batchNumber}
                       </span>
+                      <span className="text-[#9CA3AF]">·</span>
                       <span
-                        className={`font-semibold ${
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
                           batch.status === 'Success'
-                            ? 'text-emerald-700'
-                            : batch.status === 'Failed'
-                            ? 'text-red-700'
-                            : 'text-blue-700'
+                            ? 'bg-[#CDE5D0] text-[#2E7D32]'
+                            : 'bg-[#D8CEF8] text-[#5B3CC4]'
                         }`}
                       >
-                        Status: {batch.status}
+                        {batch.status === 'Success'
+                          ? 'Disbursed (UTR Generated)'
+                          : 'Ready for Bank Release'}
                       </span>
                     </div>
 
-                    <div className="text-xl font-bold font-mono tabular-nums text-slate-900 mt-1">
-                      ₹{batch.totalAmount.toLocaleString('en-IN')} ·{' '}
-                      {batch.employeeCount} Employee(s)
-                    </div>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      Gateway: {batch.gatewayName} · Created: {batch.createdAt}
-                    </div>
-
-                    <div className="mt-3 pt-2 border-t border-slate-200 text-xs text-slate-600">
-                      Included:{' '}
-                      {linkedStmts
-                        .map(
-                          (s) =>
-                            `${s.employeeName} (₹${s.netAmount.toLocaleString('en-IN')})`
-                        )
-                        .join(', ')}
+                    <div className="text-xs text-[#6B7280] mt-2">
+                      {linkedStmts.map((s) => s.employeeName).join(', ')}
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[11px] font-mono text-slate-500">
-                      UTR Prefix: {batch.utrPrefix}
-                    </span>
-
-                    <div className="flex items-center gap-2">
-                      {batch.status === 'Initiated' && (
-                        <button
-                          onClick={() =>
-                            handleAdvanceStatus(batch.id, 'Processing')
-                          }
-                          disabled={busyBatchId !== null}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-800 bg-white border border-slate-300 rounded-md hover:bg-slate-100 cursor-pointer"
-                        >
-                          <Play className="w-3 h-3" />
-                          <span>Mark Processing</span>
-                        </button>
-                      )}
-
-                      {batch.status !== 'Success' && (
-                        <button
-                          onClick={() => handleAdvanceStatus(batch.id, 'Success')}
-                          disabled={busyBatchId !== null}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-emerald-700 rounded-md hover:bg-emerald-800 cursor-pointer"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Simulate Gateway Success</span>
-                        </button>
-                      )}
-
-                      {batch.status !== 'Success' && batch.status !== 'Failed' && (
-                        <button
-                          onClick={() => handleAdvanceStatus(batch.id, 'Failed')}
-                          disabled={busyBatchId !== null}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-md hover:bg-red-100 cursor-pointer"
-                        >
-                          <AlertOctagon className="w-3.5 h-3.5" />
-                          <span>Fail</span>
-                        </button>
-                      )}
+                  <div className="text-right shrink-0">
+                    <div className="text-[24px] font-bold text-[#111827]">
+                      ₹{batch.totalAmount.toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[11px] text-[#9CA3AF]">
+                      {batch.employeeCount} Employees
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
 
-      {/* End-to-End Financial Reconciliation Ledger */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">
-              02. End-to-End Financial Reconciliation & Duplicate Payout Guard
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Only HR-Locked records can be batched. Records with active or settled UTRs ({alreadyBatchedOrPaid.length}) are blocked from duplicate payout.
-            </p>
+                <div className="pt-3 border-t border-[#F1F2F6] flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-[#9CA3AF]">
+                    {batch.gatewayName}
+                  </span>
+
+                  {batch.status !== 'Success' ? (
+                    <button
+                      onClick={() => handleCompleteSingleBatch(batch.id)}
+                      disabled={busy}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#09090B] rounded-full hover:bg-[#1F2937] cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Release Bank Payout</span>
+                    </button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#2E7D32]">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Paid</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Clean Disbursement Ledger */}
+      <div className="bg-white rounded-[28px] overflow-hidden shadow-[0_4px_20px_rgba(17,24,39,0.03)] p-6">
+        <div className="pb-4 border-b border-[#F1F2F6] flex items-center justify-between">
+          <div className="flex items-center gap-1.5 p-1 bg-[#F4F5F7] rounded-full">
+            <button
+              onClick={() => setFilterTab('all')}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-colors cursor-pointer ${
+                filterTab === 'all'
+                  ? 'bg-white text-[#111827] shadow-xs'
+                  : 'text-[#6B7280]'
+              }`}
+            >
+              All ({statements.length})
+            </button>
+            <button
+              onClick={() => setFilterTab('ready')}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-colors cursor-pointer ${
+                filterTab === 'ready'
+                  ? 'bg-white text-[#111827] shadow-xs'
+                  : 'text-[#6B7280]'
+              }`}
+            >
+              Ready to Disburse ({eligibleForDisbursement.length})
+            </button>
+            <button
+              onClick={() => setFilterTab('paid')}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-colors cursor-pointer ${
+                filterTab === 'paid'
+                  ? 'bg-white text-[#111827] shadow-xs'
+                  : 'text-[#6B7280]'
+              }`}
+            >
+              Disbursed (
+              {statements.filter((s) => s.payoutStatus === 'Success').length})
+            </button>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto mt-2">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/70 text-[11px] font-semibold text-slate-500">
-                <th className="py-3 px-4">Select</th>
-                <th className="py-3 px-3">Employee</th>
-                <th className="py-3 px-3 text-right">Source Meetings</th>
-                <th className="py-3 px-3 text-right">Statement Net FTA</th>
-                <th className="py-3 px-3">HR Lock State</th>
-                <th className="py-3 px-3">Payout Batch ID</th>
-                <th className="py-3 px-3">Gateway Status</th>
-                <th className="py-3 px-4">Bank UTR Reference</th>
+              <tr className="border-b border-[#F1F2F6] text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">
+                <th className="py-3 px-4">Employee</th>
+                <th className="py-3 px-4">Role · City</th>
+                <th className="py-3 px-4 text-right">Amount</th>
+                <th className="py-3 px-4">Approval Status</th>
+                <th className="py-3 px-4">Batch</th>
+                <th className="py-3 px-4">Disbursement</th>
+                <th className="py-3 px-4">Bank UTR</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 text-xs">
-              {statements.map((st) => {
-                const canSelect =
-                  st.payoutLocked &&
-                  st.payoutStatus !== 'Success' &&
-                  st.payoutStatus !== 'Processing' &&
-                  st.payoutStatus !== 'Initiated';
-                return (
-                  <tr key={st.id} className="hover:bg-slate-50/80">
-                    <td className="py-3 px-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedStmtIds.includes(st.id)}
-                        disabled={!canSelect}
-                        onChange={() => handleToggleSelect(st.id)}
-                        className="rounded border-slate-300"
-                      />
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="font-semibold text-slate-900">
-                        {st.employeeName}
-                      </div>
-                      <div className="text-[11px] font-mono text-slate-500">
-                        {st.employeeId} · {st.department}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-700">
-                      {st.eligibleLocalMeetings}L · {st.newLaunchMeetings}NL ·{' '}
-                      {st.outstationDays}D
-                    </td>
-                    <td className="py-3 px-3 text-right font-mono tabular-nums font-bold text-slate-900">
-                      ₹{st.netAmount.toLocaleString('en-IN')}
-                    </td>
-                    <td className="py-3 px-3">
-                      {st.payoutLocked ? (
-                        <span className="font-semibold text-emerald-700">
-                          Locked (v{st.lockVersion})
-                        </span>
-                      ) : (
-                        <span className="text-slate-500">
-                          Unlocked ({st.status})
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-slate-700">
-                      {st.payoutBatchId !== 'NONE' ? st.payoutBatchId : '—'}
-                    </td>
-                    <td className="py-3 px-3">
-                      <span
-                        className={`font-semibold ${
-                          st.payoutStatus === 'Success'
-                            ? 'text-emerald-700'
-                            : st.payoutStatus === 'Initiated' ||
-                              st.payoutStatus === 'Processing'
-                            ? 'text-blue-700'
-                            : st.payoutStatus === 'Failed'
-                            ? 'text-red-700'
-                            : 'text-slate-500'
-                        }`}
-                      >
-                        {st.payoutStatus}
+            <tbody className="divide-y divide-[#F1F2F6] text-[13px]">
+              {filteredStatements.map((st) => (
+                <tr key={st.id} className="hover:bg-[#F4F5F7]/50">
+                  <td className="py-3.5 px-4 font-semibold text-[#111827]">
+                    {st.employeeName}
+                  </td>
+                  <td className="py-3.5 px-4 text-[#6B7280]">
+                    {st.designation} · {st.baseCity}
+                  </td>
+                  <td className="py-3.5 px-4 text-right tabular-nums font-bold text-[#111827]">
+                    ₹{st.netAmount.toLocaleString('en-IN')}
+                  </td>
+                  <td className="py-3.5 px-4">
+                    {st.payoutLocked ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#CDE5D0] text-[#2E7D32] text-[11px] font-semibold">
+                        {st.employeeId === 'EMP-1001' ||
+                        st.employeeId === 'EMP-1002'
+                          ? 'HR Exception Approved'
+                          : 'Zero-Touch Auto-Approved'}
                       </span>
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-700">
-                      {st.utrNumber !== 'PENDING' ? st.utrNumber : '—'}
-                    </td>
-                  </tr>
-                );
-              })}
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#EFE0D6] text-[#B85D2B] text-[11px] font-semibold">
+                        Awaiting Exception Resolution
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3.5 px-4 text-[#4B5563]">
+                    {st.payoutBatchId !== 'NONE' ? st.payoutBatchId : '—'}
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span
+                      className={`font-semibold ${
+                        st.payoutStatus === 'Success'
+                          ? 'text-[#2E7D32]'
+                          : st.payoutLocked
+                          ? 'text-[#5B3CC4]'
+                          : 'text-[#9CA3AF]'
+                      }`}
+                    >
+                      {st.payoutStatus === 'Success'
+                        ? 'Disbursed'
+                        : st.payoutLocked
+                        ? 'Ready to Disburse'
+                        : 'Pending'}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 font-mono text-xs text-[#4B5563]">
+                    {st.utrNumber !== 'PENDING' ? st.utrNumber : '—'}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

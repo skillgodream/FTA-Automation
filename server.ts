@@ -14,16 +14,21 @@ const app = express();
 app.use(express.json());
 
 function deterministicFallbackParse(
-  message: string,
-  systemLocalMeetings: number,
-  systemOutstationDays: number,
-  systemNewLaunchMeetings: number
+  message = '',
+  systemLocalMeetings = 0,
+  systemOutstationDays = 0,
+  systemNewLaunchMeetings = 0
 ) {
-  const lower = message.toLowerCase();
+  const lower = String(message || '').toLowerCase();
   let claimType = 'Local Meetings';
   let systemRecordedValue = systemLocalMeetings;
 
-  if (lower.includes('outstation') || lower.includes('day') || lower.includes('special city') || lower.includes('tier')) {
+  if (
+    lower.includes('outstation') ||
+    lower.includes('day') ||
+    lower.includes('special city') ||
+    lower.includes('tier')
+  ) {
     claimType = 'Outstation';
     systemRecordedValue = systemOutstationDays;
   } else if (lower.includes('new launch') || lower.includes('launch')) {
@@ -34,7 +39,7 @@ function deterministicFallbackParse(
     systemRecordedValue = systemLocalMeetings;
   }
 
-  const numbers = (message.match(/\d+/g) || []).map(Number);
+  const numbers = (String(message || '').match(/\d+/g) || []).map(Number);
   let employeeReportedValue = systemRecordedValue + 2;
   if (numbers.length >= 2) {
     const nonSystem = numbers.find((n) => n !== systemRecordedValue);
@@ -52,7 +57,7 @@ function deterministicFallbackParse(
     disputedDelta,
     confidence: 'High (98%)',
     summary: `Employee reports ${employeeReportedValue} ${claimType.toLowerCase()} versus ${systemRecordedValue} recorded in system (delta: ${disputedDelta >= 0 ? '+' : ''}${disputedDelta}).`,
-    recommendedAction: `Verify ${Math.abs(disputedDelta)} unsynced or pending source tool record(s) in source connector and trigger targeted re-sync.`
+    recommendedAction: `Verify ${Math.abs(disputedDelta)} unsynced or pending source tool record(s) in source connector and trigger targeted re-sync.`,
   };
 }
 
@@ -64,7 +69,7 @@ app.post('/api/disputes/interpret', async (req, res) => {
     sourceTool = 'Prowl',
     systemLocalMeetings = 40,
     systemOutstationDays = 0,
-    systemNewLaunchMeetings = 0
+    systemNewLaunchMeetings = 0,
   } = req.body || {};
 
   if (!message || typeof message !== 'string') {
@@ -82,7 +87,7 @@ app.post('/api/disputes/interpret', async (req, res) => {
   if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
     return res.json({
       ...fallback,
-      engine: 'Gemini Dispute Interpreter (Rule-Assisted Fallback)'
+      engine: 'Gemini Dispute Interpreter (Rule-Assisted Fallback)',
     });
   }
 
@@ -91,9 +96,9 @@ app.post('/api/disputes/interpret', async (req, res) => {
       apiKey,
       httpOptions: {
         headers: {
-          'User-Agent': 'aistudio-build'
-        }
-      }
+          'User-Agent': 'aistudio-build',
+        },
+      },
     });
 
     const response = await ai.models.generateContent({
@@ -116,32 +121,35 @@ Extract the structured claim type, employee reported numeric figure, system reco
           properties: {
             claimType: {
               type: Type.STRING,
-              description: 'One of: Local Meetings, Outstation, New Launch, Rate Discrepancy'
+              description:
+                'One of: Local Meetings, Outstation, New Launch, Rate Discrepancy',
             },
             employeeReportedValue: {
               type: Type.NUMBER,
-              description: 'Numeric count reported by the employee'
+              description: 'Numeric count reported by the employee',
             },
             systemRecordedValue: {
               type: Type.NUMBER,
-              description: 'Numeric count recorded by the system'
+              description: 'Numeric count recorded by the system',
             },
             disputedDelta: {
               type: Type.NUMBER,
-              description: 'Difference: employeeReportedValue minus systemRecordedValue'
+              description:
+                'Difference: employeeReportedValue minus systemRecordedValue',
             },
             confidence: {
               type: Type.STRING,
-              description: 'Confidence level e.g. High (99%)'
+              description: 'Confidence level e.g. High (99%)',
             },
             summary: {
               type: Type.STRING,
-              description: 'Concise 1-sentence summary of the discrepancy'
+              description: 'Concise 1-sentence summary of the discrepancy',
             },
             recommendedAction: {
               type: Type.STRING,
-              description: 'Recommended BA verification step in source system'
-            }
+              description:
+                'Recommended BA verification step in source system',
+            },
           },
           required: [
             'claimType',
@@ -150,10 +158,10 @@ Extract the structured claim type, employee reported numeric figure, system reco
             'disputedDelta',
             'confidence',
             'summary',
-            'recommendedAction'
-          ]
-        }
-      }
+            'recommendedAction',
+          ],
+        },
+      },
     });
 
     const parsed = JSON.parse((response.text ?? '{}').trim());
@@ -174,24 +182,25 @@ Extract the structured claim type, employee reported numeric figure, system reco
       confidence: parsed.confidence || fallback.confidence,
       summary: parsed.summary || fallback.summary,
       recommendedAction: parsed.recommendedAction || fallback.recommendedAction,
-      engine: 'Gemini 3.8 Flash NLP Interpreter'
+      engine: 'Gemini 3.8 Flash NLP Interpreter',
     });
-  } catch (error: any) {
-    console.error('Gemini dispute interpretation error:', error?.message || error);
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error('Gemini dispute interpretation error:', errMsg);
     return res.json({
       ...fallback,
       engine: 'Gemini Dispute Interpreter (Resilient Fallback)',
-      apiWarning: error?.message || 'Using structured fallback parser'
+      apiWarning: errMsg || 'Using structured fallback parser',
     });
   }
 });
 
 async function startServer() {
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: 'spa'
+      appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
@@ -203,7 +212,9 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`FTA Automation Platform server listening on http://0.0.0.0:${PORT}`);
+    console.log(
+      `FTA Automation Platform server listening on http://0.0.0.0:${PORT}`
+    );
   });
 }
 
