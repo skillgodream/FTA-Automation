@@ -1,0 +1,478 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() {
+      return request.resource.data;
+    }
+    function existing() {
+      return resource.data;
+    }
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+    function isOwner(data) {
+      return isSignedIn() && data.ownerId == request.auth.uid;
+    }
+
+    // Connection validation probe
+    match /test/{docId} {
+      allow get: if isValidId(docId);
+      allow list, create, update, delete: if false;
+    }
+
+    // 1. Employees Collection
+    function isValidEmployee(data) {
+      return data.keys().hasAll([
+        'id', 'name', 'email', 'designation', 'department', 'baseCity',
+        'cityCategory', 'reportingManager', 'baOwner', 'baRegion',
+        'sourceTool', 'ownVehicleEligible', 'status', 'ownerId', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'name', 'email', 'designation', 'department', 'baseCity',
+        'cityCategory', 'reportingManager', 'baOwner', 'baRegion',
+        'sourceTool', 'ownVehicleEligible', 'status', 'ownerId', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+      data.designation is string && data.designation.size() >= 1 && data.designation.size() <= 80 &&
+      data.department is string && data.department.size() >= 1 && data.department.size() <= 80 &&
+      data.baseCity is string && data.baseCity.size() >= 1 && data.baseCity.size() <= 80 &&
+      data.cityCategory is string && data.cityCategory.size() >= 1 && data.cityCategory.size() <= 40 &&
+      data.reportingManager is string && data.reportingManager.size() >= 1 && data.reportingManager.size() <= 120 &&
+      data.baOwner is string && data.baOwner.size() >= 1 && data.baOwner.size() <= 120 &&
+      data.baRegion is string && data.baRegion.size() >= 1 && data.baRegion.size() <= 80 &&
+      data.sourceTool is string && data.sourceTool.size() >= 1 && data.sourceTool.size() <= 60 &&
+      data.ownVehicleEligible is bool &&
+      data.status is string && data.status.size() >= 1 && data.status.size() <= 40 &&
+      isValidId(data.ownerId) &&
+      data.ownerId == request.auth.uid &&
+      data.updatedAt == request.time;
+    }
+
+    match /employees/{employeeId} {
+      allow get: if isSignedIn() && isValidId(employeeId) && isOwner(existing());
+      allow list: if isSignedIn() && isOwner(existing());
+      allow create: if isVerifiedUser() && isValidId(employeeId) && isValidEmployee(incoming());
+      allow update: if isVerifiedUser() && isValidId(employeeId) && isValidEmployee(incoming()) && isOwner(existing()) && (
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'email', 'designation', 'department', 'baseCity',
+          'cityCategory', 'reportingManager', 'baOwner', 'baRegion',
+          'sourceTool', 'ownVehicleEligible', 'status', 'updatedAt'
+        ])
+      );
+      allow delete: if isVerifiedUser() && isValidId(employeeId) && isOwner(existing());
+    }
+
+    // 2. Rates Collection
+    function isValidRateConfig(data) {
+      return data.keys().hasAll([
+        'id', 'designation', 'tier1LocalRate', 'tier2LocalRate', 'tier3LocalRate',
+        'newLaunchRate', 'specialCityOutstationRate', 'ownVehicleTier1Rate',
+        'ownVehicleTier23Rate', 'standardOutstationRate', 'maxClaimLimit',
+        'isIllustrative', 'approvalStatus', 'ownerId', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'designation', 'tier1LocalRate', 'tier2LocalRate', 'tier3LocalRate',
+        'newLaunchRate', 'specialCityOutstationRate', 'ownVehicleTier1Rate',
+        'ownVehicleTier23Rate', 'standardOutstationRate', 'maxClaimLimit',
+        'isIllustrative', 'approvalStatus', 'ownerId', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.designation is string && data.designation.size() >= 1 && data.designation.size() <= 80 &&
+      data.tier1LocalRate is number && data.tier1LocalRate >= 0 &&
+      data.tier2LocalRate is number && data.tier2LocalRate >= 0 &&
+      data.tier3LocalRate is number && data.tier3LocalRate >= 0 &&
+      data.newLaunchRate is number && data.newLaunchRate >= 0 &&
+      data.specialCityOutstationRate is number && data.specialCityOutstationRate >= 0 &&
+      data.ownVehicleTier1Rate is number && data.ownVehicleTier1Rate >= 0 &&
+      data.ownVehicleTier23Rate is number && data.ownVehicleTier23Rate >= 0 &&
+      data.standardOutstationRate is number && data.standardOutstationRate >= 0 &&
+      data.maxClaimLimit is number && data.maxClaimLimit >= 0 &&
+      data.isIllustrative is bool &&
+      data.approvalStatus is string && data.approvalStatus.size() >= 1 && data.approvalStatus.size() <= 60 &&
+      isValidId(data.ownerId) &&
+      data.ownerId == request.auth.uid &&
+      data.updatedAt == request.time;
+    }
+
+    match /rates/{rateId} {
+      allow get: if isSignedIn() && isValidId(rateId) && isOwner(existing());
+      allow list: if isSignedIn() && isOwner(existing());
+      allow create: if isVerifiedUser() && isValidId(rateId) && isValidRateConfig(incoming());
+      allow update: if isVerifiedUser() && isValidId(rateId) && isValidRateConfig(incoming()) && isOwner(existing()) && (
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'designation', 'tier1LocalRate', 'tier2LocalRate', 'tier3LocalRate',
+          'newLaunchRate', 'specialCityOutstationRate', 'ownVehicleTier1Rate',
+          'ownVehicleTier23Rate', 'standardOutstationRate', 'maxClaimLimit',
+          'isIllustrative', 'approvalStatus', 'updatedAt'
+        ])
+      );
+      allow delete: if isVerifiedUser() && isValidId(rateId) && isOwner(existing());
+    }
+
+    // 3. Cities Collection
+    function isValidCityConfig(data) {
+      return data.keys().hasAll([
+        'id', 'cityName', 'state', 'tier', 'isSpecialCity',
+        'isNewLaunchCity', 'region', 'activeStatus', 'ownerId', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'cityName', 'state', 'tier', 'isSpecialCity',
+        'isNewLaunchCity', 'region', 'activeStatus', 'ownerId', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.cityName is string && data.cityName.size() >= 1 && data.cityName.size() <= 80 &&
+      data.state is string && data.state.size() >= 1 && data.state.size() <= 80 &&
+      data.tier is string && data.tier.size() >= 1 && data.tier.size() <= 40 &&
+      data.isSpecialCity is bool &&
+      data.isNewLaunchCity is bool &&
+      data.region is string && data.region.size() >= 1 && data.region.size() <= 60 &&
+      data.activeStatus is string && data.activeStatus.size() >= 1 && data.activeStatus.size() <= 40 &&
+      isValidId(data.ownerId) &&
+      data.ownerId == request.auth.uid &&
+      data.updatedAt == request.time;
+    }
+
+    match /cities/{cityId} {
+      allow get: if isSignedIn() && isValidId(cityId) && isOwner(existing());
+      allow list: if isSignedIn() && isOwner(existing());
+      allow create: if isVerifiedUser() && isValidId(cityId) && isValidCityConfig(incoming());
+      allow update: if isVerifiedUser() && isValidId(cityId) && isValidCityConfig(incoming()) && isOwner(existing()) && (
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'cityName', 'state', 'tier', 'isSpecialCity',
+          'isNewLaunchCity', 'region', 'activeStatus', 'updatedAt'
+        ])
+      );
+      allow delete: if isVerifiedUser() && isValidId(cityId) && isOwner(existing());
+    }
+
+    // 4. Source Records Collection
+    function isValidSourceRecord(data) {
+      return data.keys().hasAll([
+        'id', 'externalRefId', 'employeeId', 'employeeName', 'department',
+        'date', 'city', 'cityCategory', 'meetingCategory', 'vehicleMode',
+        'sourceTool', 'sourceStatus', 'syncStatus', 'clientName', 'notes',
+        'ticketRef', 'ownerId', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'externalRefId', 'employeeId', 'employeeName', 'department',
+        'date', 'city', 'cityCategory', 'meetingCategory', 'vehicleMode',
+        'sourceTool', 'sourceStatus', 'syncStatus', 'clientName', 'notes',
+        'ticketRef', 'ownerId', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.externalRefId is string && data.externalRefId.size() <= 64 &&
+      isValidId(data.employeeId) &&
+      data.employeeName is string && data.employeeName.size() <= 120 &&
+      data.department is string && data.department.size() <= 80 &&
+      data.date is string && data.date.size() <= 20 &&
+      data.city is string && data.city.size() <= 80 &&
+      data.cityCategory is string && data.cityCategory.size() <= 40 &&
+      data.meetingCategory is string && data.meetingCategory.size() <= 40 &&
+      data.vehicleMode is string && data.vehicleMode.size() <= 40 &&
+      data.sourceTool is string && data.sourceTool.size() <= 60 &&
+      data.sourceStatus is string && data.sourceStatus.size() <= 60 &&
+      data.syncStatus is string && data.syncStatus.size() <= 60 &&
+      data.clientName is string && data.clientName.size() <= 160 &&
+      data.notes is string && data.notes.size() <= 500 &&
+      data.ticketRef is string && data.ticketRef.size() <= 64 &&
+      isValidId(data.ownerId) &&
+      data.ownerId == request.auth.uid &&
+      data.updatedAt == request.time;
+    }
+
+    match /source_records/{recordId} {
+      allow get: if isSignedIn() && isValidId(recordId) && isOwner(existing());
+      allow list: if isSignedIn() && isOwner(existing());
+      allow create: if isVerifiedUser() && isValidId(recordId) && isValidSourceRecord(incoming());
+      allow update: if isVerifiedUser() && isValidId(recordId) && isValidSourceRecord(incoming()) && isOwner(existing()) && (
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'sourceStatus', 'syncStatus', 'notes', 'ticketRef', 'updatedAt'
+        ])
+      );
+      allow delete: if isVerifiedUser() && isValidId(recordId) && isOwner(existing());
+    }
+
+    // 5. Sync Connectors Collection
+    function isValidSyncConnector(data) {
+      return data.keys().hasAll([
+        'id', 'name', 'toolType', 'status', 'lastSyncTime',
+        'recordsFetched', 'recordsSuccessful', 'recordsFailed', 'ownerId', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'name', 'toolType', 'status', 'lastSyncTime',
+        'recordsFetched', 'recordsSuccessful', 'recordsFailed', 'ownerId', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.name is string && data.name.size() <= 80 &&
+      data.toolType is string && data.toolType.size() <= 60 &&
+      data.status is string && data.status.size() <= 40 &&
+      data.lastSyncTime is string && data.lastSyncTime.size() <= 60 &&
+      data.recordsFetched is number &&
+      data.recordsSuccessful is number &&
+      data.recordsFailed is number &&
+      isValidId(data.ownerId) &&
+      data.ownerId == request.auth.uid &&
+      data.updatedAt == request.time;
+    }
+
+    match /sync_connectors/{connectorId} {
+      allow get: if isSignedIn() && isValidId(connectorId) && isOwner(existing());
+      allow list: if isSignedIn() && isOwner(existing());
+      allow create: if isVerifiedUser() && isValidId(connectorId) && isValidSyncConnector(incoming());
+      allow update: if isVerifiedUser() && isValidId(connectorId) && isValidSyncConnector(incoming()) && isOwner(existing()) && (
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'lastSyncTime', 'recordsFetched', 'recordsSuccessful', 'recordsFailed', 'updatedAt'
+        ])
+      );
+      allow delete: if isVerifiedUser() && isValidId(connectorId) && isOwner(existing());
+    }
+
+    // 6. Statements Collection
+    function isValidStatement(data) {
+      return data.keys().hasAll([
+        'id', 'employeeId', 'employeeName', 'designation', 'department',
+        'baseCity', 'cityCategory', 'baOwner', 'month', 'sourceTool',
+        'eligibleLocalMeetings', 'localRate', 'localAmount', 'newLaunchMeetings',
+        'newLaunchRuleExcluded', 'newLaunchRate', 'newLaunchAmount', 'outstationDays',
+        'outstationRateType', 'outstationDailyRate', 'outstationAmount', 'grossAmount',
+        'maxClaimLimit', 'capApplied', 'netAmount', 'calculationTrace', 'status',
+        'payoutLocked', 'lockVersion', 'changeRequestStatus', 'changeRequestReason',
+        'disputeTicketId', 'payoutBatchId', 'payoutStatus', 'utrNumber',
+        'ownerId', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'employeeId', 'employeeName', 'designation', 'department',
+        'baseCity', 'cityCategory', 'baOwner', 'month', 'sourceTool',
+        'eligibleLocalMeetings', 'localRate', 'localAmount', 'newLaunchMeetings',
+        'newLaunchRuleExcluded', 'newLaunchRate', 'newLaunchAmount', 'outstationDays',
+        'outstationRateType', 'outstationDailyRate', 'outstationAmount', 'grossAmount',
+        'maxClaimLimit', 'capApplied', 'netAmount', 'calculationTrace', 'status',
+        'payoutLocked', 'lockVersion', 'changeRequestStatus', 'changeRequestReason',
+        'disputeTicketId', 'payoutBatchId', 'payoutStatus', 'utrNumber',
+        'ownerId', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      isValidId(data.employeeId) &&
+      data.employeeName is string && data.employeeName.size() <= 120 &&
+      data.designation is string && data.designation.size() <= 80 &&
+      data.department is string && data.department.size() <= 80 &&
+      data.baseCity is string && data.baseCity.size() <= 80 &&
+      data.cityCategory is string && data.cityCategory.size() <= 40 &&
+      data.baOwner is string && data.baOwner.size() <= 120 &&
+      data.month is string && data.month.size() <= 20 &&
+      data.sourceTool is string && data.sourceTool.size() <= 60 &&
+      data.eligibleLocalMeetings is number &&
+      data.localRate is number &&
+      data.localAmount is number &&
+      data.newLaunchMeetings is number &&
+      data.newLaunchRuleExcluded is number &&
+      data.newLaunchRate is number &&
+      data.newLaunchAmount is number &&
+      data.outstationDays is number &&
+      data.outstationRateType is string && data.outstationRateType.size() <= 80 &&
+      data.outstationDailyRate is number &&
+      data.outstationAmount is number &&
+      data.grossAmount is number &&
+      data.maxClaimLimit is number &&
+      data.capApplied is bool &&
+      data.netAmount is number &&
+      data.calculationTrace is string && data.calculationTrace.size() <= 1000 &&
+      data.status is string && data.status.size() <= 60 &&
+      data.payoutLocked is bool &&
+      data.lockVersion is number &&
+      data.changeRequestStatus is string && data.changeRequestStatus.size() <= 60 &&
+      data.changeRequestReason is string && data.changeRequestReason.size() <= 500 &&
+      data.disputeTicketId is string && data.disputeTicketId.size() <= 64 &&
+      data.payoutBatchId is string && data.payoutBatchId.size() <= 64 &&
+      data.payoutStatus is string && data.payoutStatus.size() <= 60 &&
+      data.utrNumber is string && data.utrNumber.size() <= 80 &&
+      isValidId(data.ownerId) &&
+      data.ownerId == request.auth.uid &&
+      data.updatedAt == request.time;
+    }
+
+    match /statements/{statementId} {
+      allow get: if isSignedIn() && isValidId(statementId) && isOwner(existing());
+      allow list: if isSignedIn() && isOwner(existing());
+      allow create: if isVerifiedUser() && isValidId(statementId) && isValidStatement(incoming());
+      allow update: if isVerifiedUser() && isValidId(statementId) && isValidStatement(incoming()) && isOwner(existing()) && (
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'eligibleLocalMeetings', 'localRate', 'localAmount', 'newLaunchMeetings',
+          'newLaunchRuleExcluded', 'newLaunchRate', 'newLaunchAmount', 'outstationDays',
+          'outstationRateType', 'outstationDailyRate', 'outstationAmount', 'grossAmount',
+          'maxClaimLimit', 'capApplied', 'netAmount', 'calculationTrace', 'status',
+          'payoutLocked', 'lockVersion', 'changeRequestStatus', 'changeRequestReason',
+          'disputeTicketId', 'payoutBatchId', 'payoutStatus', 'utrNumber', 'updatedAt'
+        ])
+      );
+      allow delete: if isVerifiedUser() && isValidId(statementId) && isOwner(existing());
+    }
+
+    // 7. Disputes Collection
+    function isValidDispute(data) {
+      return data.keys().hasAll([
+        'id', 'ticketNumber', 'statementId', 'employeeId', 'employeeName',
+        'designation', 'department', 'baseCity', 'month', 'claimType',
+        'systemRecordedValue', 'employeeReportedValue', 'disputedDelta',
+        'financialImpact', 'employeeMessage', 'aiInterpretation', 'assignedBa',
+        'baRegion', 'sourceTool', 'status', 'sourceCorrected', 'reSynced',
+        'resolutionNotes', 'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'ticketNumber', 'statementId', 'employeeId', 'employeeName',
+        'designation', 'department', 'baseCity', 'month', 'claimType',
+        'systemRecordedValue', 'employeeReportedValue', 'disputedDelta',
+        'financialImpact', 'employeeMessage', 'aiInterpretation', 'assignedBa',
+        'baRegion', 'sourceTool', 'status', 'sourceCorrected', 'reSynced',
+        'resolutionNotes', 'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.ticketNumber is string && data.ticketNumber.size() <= 64 &&
+      isValidId(data.statementId) &&
+      isValidId(data.employeeId) &&
+      data.employeeName is string && data.employeeName.size() <= 120 &&
+      data.designation is string && data.designation.size() <= 80 &&
+      data.department is string && data.department.size() <= 80 &&
+      data.baseCity is string && data.baseCity.size() <= 80 &&
+      data.month is string && data.month.size() <= 20 &&
+      data.claimType is string && data.claimType.size() <= 60 &&
+      data.systemRecordedValue is number &&
+      data.employeeReportedValue is number &&
+      data.disputedDelta is number &&
+      data.financialImpact is number &&
+      data.employeeMessage is string && data.employeeMessage.size() <= 1000 &&
+      data.aiInterpretation is string && data.aiInterpretation.size() <= 1000 &&
+      data.assignedBa is string && data.assignedBa.size() <= 120 &&
+      data.baRegion is string && data.baRegion.size() <= 80 &&
+      data.sourceTool is string && data.sourceTool.size() <= 60 &&
+      data.status is string && data.status.size() <= 60 &&
+      data.sourceCorrected is bool &&
+      data.reSynced is bool &&
+      data.resolutionNotes is string && data.resolutionNotes.size() <= 1000 &&
+      isValidId(data.ownerId) &&
+      data.ownerId == request.auth.uid &&
+      data.createdAt is string && data.createdAt.size() <= 60 &&
+      data.updatedAt == request.time;
+    }
+
+    match /disputes/{disputeId} {
+      allow get: if isSignedIn() && isValidId(disputeId) && isOwner(existing());
+      allow list: if isSignedIn() && isOwner(existing());
+      allow create: if isVerifiedUser() && isValidId(disputeId) && isValidDispute(incoming());
+      allow update: if isVerifiedUser() && isValidId(disputeId) && isValidDispute(incoming()) && isOwner(existing()) && (
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'sourceCorrected', 'reSynced', 'resolutionNotes', 'updatedAt'
+        ])
+      );
+      allow delete: if isVerifiedUser() && isValidId(disputeId) && isOwner(existing());
+    }
+
+    // 8. Payout Batches Collection
+    function isValidPayoutBatch(data) {
+      return data.keys().hasAll([
+        'id', 'batchNumber', 'month', 'gatewayName', 'employeeCount',
+        'totalAmount', 'status', 'initiatedBy', 'utrPrefix',
+        'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'batchNumber', 'month', 'gatewayName', 'employeeCount',
+        'totalAmount', 'status', 'initiatedBy', 'utrPrefix',
+        'ownerId', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.batchNumber is string && data.batchNumber.size() <= 64 &&
+      data.month is string && data.month.size() <= 20 &&
+      data.gatewayName is string && data.gatewayName.size() <= 80 &&
+      data.employeeCount is number &&
+      data.totalAmount is number &&
+      data.status is string && data.status.size() <= 40 &&
+      data.initiatedBy is string && data.initiatedBy.size() <= 120 &&
+      data.utrPrefix is string && data.utrPrefix.size() <= 60 &&
+      isValidId(data.ownerId) &&
+      data.ownerId == request.auth.uid &&
+      data.createdAt is string && data.createdAt.size() <= 60 &&
+      data.updatedAt == request.time;
+    }
+
+    match /payout_batches/{batchId} {
+      allow get: if isSignedIn() && isValidId(batchId) && isOwner(existing());
+      allow list: if isSignedIn() && isOwner(existing());
+      allow create: if isVerifiedUser() && isValidId(batchId) && isValidPayoutBatch(incoming());
+      allow update: if isVerifiedUser() && isValidId(batchId) && isValidPayoutBatch(incoming()) && isOwner(existing()) && (
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'updatedAt'
+        ])
+      );
+      allow delete: if isVerifiedUser() && isValidId(batchId) && isOwner(existing());
+    }
+
+    // 9. Audit Logs Collection (Immutable Append-Only)
+    function isValidAuditLog(data) {
+      return data.keys().hasAll([
+        'id', 'eventType', 'module', 'actorName', 'actorRole',
+        'entityId', 'referenceId', 'oldValue', 'newValue',
+        'description', 'source', 'ownerId', 'timestamp', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'eventType', 'module', 'actorName', 'actorRole',
+        'entityId', 'referenceId', 'oldValue', 'newValue',
+        'description', 'source', 'ownerId', 'timestamp', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.eventType is string && data.eventType.size() <= 60 &&
+      data.module is string && data.module.size() <= 60 &&
+      data.actorName is string && data.actorName.size() <= 120 &&
+      data.actorRole is string && data.actorRole.size() <= 60 &&
+      data.entityId is string && data.entityId.size() <= 64 &&
+      data.referenceId is string && data.referenceId.size() <= 64 &&
+      data.oldValue is string && data.oldValue.size() <= 500 &&
+      data.newValue is string && data.newValue.size() <= 500 &&
+      data.description is string && data.description.size() <= 1000 &&
+      data.source is string && data.source.size() <= 80 &&
+      isValidId(data.ownerId) &&
+      data.ownerId == request.auth.uid &&
+      data.timestamp is string && data.timestamp.size() <= 60 &&
+      data.updatedAt == request.time;
+    }
+
+    match /audit_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && isOwner(existing());
+      allow list: if isSignedIn() && isOwner(existing());
+      allow create: if isVerifiedUser() && isValidId(logId) && isValidAuditLog(incoming());
+      allow update, delete: if false;
+    }
+  }
+}

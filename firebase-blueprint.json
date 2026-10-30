@@ -1,0 +1,316 @@
+{
+  "entities": {
+    "Employee": {
+      "title": "Employee",
+      "description": "Field employee record in Employee Master with designation, city, and BA mapping.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "designation": { "type": "string", "maxLength": 80 },
+        "department": { "type": "string", "maxLength": 80 },
+        "baseCity": { "type": "string", "maxLength": 80 },
+        "cityCategory": { "type": "string", "maxLength": 40 },
+        "reportingManager": { "type": "string", "maxLength": 120 },
+        "baOwner": { "type": "string", "maxLength": 120 },
+        "baRegion": { "type": "string", "maxLength": 80 },
+        "sourceTool": { "type": "string", "maxLength": 60 },
+        "ownVehicleEligible": { "type": "boolean" },
+        "status": { "type": "string", "maxLength": 40 },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "name", "email", "designation", "department", "baseCity",
+        "cityCategory", "reportingManager", "baOwner", "baRegion",
+        "sourceTool", "ownVehicleEligible", "status", "ownerId", "updatedAt"
+      ]
+    },
+    "RateConfig": {
+      "title": "RateConfig",
+      "description": "Designation-wise deterministic FTA rate configuration and maximum claim limit.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "designation": { "type": "string", "maxLength": 80 },
+        "tier1LocalRate": { "type": "number" },
+        "tier2LocalRate": { "type": "number" },
+        "tier3LocalRate": { "type": "number" },
+        "newLaunchRate": { "type": "number" },
+        "specialCityOutstationRate": { "type": "number" },
+        "ownVehicleTier1Rate": { "type": "number" },
+        "ownVehicleTier23Rate": { "type": "number" },
+        "standardOutstationRate": { "type": "number" },
+        "maxClaimLimit": { "type": "number" },
+        "isIllustrative": { "type": "boolean" },
+        "approvalStatus": { "type": "string", "maxLength": 60 },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "designation", "tier1LocalRate", "tier2LocalRate", "tier3LocalRate",
+        "newLaunchRate", "specialCityOutstationRate", "ownVehicleTier1Rate",
+        "ownVehicleTier23Rate", "standardOutstationRate", "maxClaimLimit",
+        "isIllustrative", "approvalStatus", "ownerId", "updatedAt"
+      ]
+    },
+    "CityConfig": {
+      "title": "CityConfig",
+      "description": "City classification for Tier 1/2/3, Special City, and New Launch status.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "cityName": { "type": "string", "maxLength": 80 },
+        "state": { "type": "string", "maxLength": 80 },
+        "tier": { "type": "string", "maxLength": 40 },
+        "isSpecialCity": { "type": "boolean" },
+        "isNewLaunchCity": { "type": "boolean" },
+        "region": { "type": "string", "maxLength": 60 },
+        "activeStatus": { "type": "string", "maxLength": 40 },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "cityName", "state", "tier", "isSpecialCity",
+        "isNewLaunchCity", "region", "activeStatus", "ownerId", "updatedAt"
+      ]
+    },
+    "SourceRecord": {
+      "title": "SourceRecord",
+      "description": "Meeting or travel activity synced from Prowl, LeadSquared, or Google Sheet CSV.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "externalRefId": { "type": "string", "maxLength": 64 },
+        "employeeId": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "employeeName": { "type": "string", "maxLength": 120 },
+        "department": { "type": "string", "maxLength": 80 },
+        "date": { "type": "string", "maxLength": 20 },
+        "city": { "type": "string", "maxLength": 80 },
+        "cityCategory": { "type": "string", "maxLength": 40 },
+        "meetingCategory": { "type": "string", "maxLength": 40 },
+        "vehicleMode": { "type": "string", "maxLength": 40 },
+        "sourceTool": { "type": "string", "maxLength": 60 },
+        "sourceStatus": { "type": "string", "maxLength": 60 },
+        "syncStatus": { "type": "string", "maxLength": 60 },
+        "clientName": { "type": "string", "maxLength": 160 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "ticketRef": { "type": "string", "maxLength": 64 },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "externalRefId", "employeeId", "employeeName", "department",
+        "date", "city", "cityCategory", "meetingCategory", "vehicleMode",
+        "sourceTool", "sourceStatus", "syncStatus", "clientName", "notes",
+        "ticketRef", "ownerId", "updatedAt"
+      ]
+    },
+    "SyncConnector": {
+      "title": "SyncConnector",
+      "description": "Connector metadata and telemetry for Prowl, LeadSquared, and Google Sheet CSV.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 80 },
+        "toolType": { "type": "string", "maxLength": 60 },
+        "status": { "type": "string", "maxLength": 40 },
+        "lastSyncTime": { "type": "string", "maxLength": 60 },
+        "recordsFetched": { "type": "number" },
+        "recordsSuccessful": { "type": "number" },
+        "recordsFailed": { "type": "number" },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "name", "toolType", "status", "lastSyncTime",
+        "recordsFetched", "recordsSuccessful", "recordsFailed", "ownerId", "updatedAt"
+      ]
+    },
+    "EmployeeStatement": {
+      "title": "EmployeeStatement",
+      "description": "Calculated monthly FTA statement with transparent breakdown, lock state, and disbursement state.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "employeeId": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "employeeName": { "type": "string", "maxLength": 120 },
+        "designation": { "type": "string", "maxLength": 80 },
+        "department": { "type": "string", "maxLength": 80 },
+        "baseCity": { "type": "string", "maxLength": 80 },
+        "cityCategory": { "type": "string", "maxLength": 40 },
+        "baOwner": { "type": "string", "maxLength": 120 },
+        "month": { "type": "string", "maxLength": 20 },
+        "sourceTool": { "type": "string", "maxLength": 60 },
+        "eligibleLocalMeetings": { "type": "number" },
+        "localRate": { "type": "number" },
+        "localAmount": { "type": "number" },
+        "newLaunchMeetings": { "type": "number" },
+        "newLaunchRuleExcluded": { "type": "number" },
+        "newLaunchRate": { "type": "number" },
+        "newLaunchAmount": { "type": "number" },
+        "outstationDays": { "type": "number" },
+        "outstationRateType": { "type": "string", "maxLength": 80 },
+        "outstationDailyRate": { "type": "number" },
+        "outstationAmount": { "type": "number" },
+        "grossAmount": { "type": "number" },
+        "maxClaimLimit": { "type": "number" },
+        "capApplied": { "type": "boolean" },
+        "netAmount": { "type": "number" },
+        "calculationTrace": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "maxLength": 60 },
+        "payoutLocked": { "type": "boolean" },
+        "lockVersion": { "type": "number" },
+        "changeRequestStatus": { "type": "string", "maxLength": 60 },
+        "changeRequestReason": { "type": "string", "maxLength": 500 },
+        "disputeTicketId": { "type": "string", "maxLength": 64 },
+        "payoutBatchId": { "type": "string", "maxLength": 64 },
+        "payoutStatus": { "type": "string", "maxLength": 60 },
+        "utrNumber": { "type": "string", "maxLength": 80 },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "employeeId", "employeeName", "designation", "department",
+        "baseCity", "cityCategory", "baOwner", "month", "sourceTool",
+        "eligibleLocalMeetings", "localRate", "localAmount", "newLaunchMeetings",
+        "newLaunchRuleExcluded", "newLaunchRate", "newLaunchAmount", "outstationDays",
+        "outstationRateType", "outstationDailyRate", "outstationAmount", "grossAmount",
+        "maxClaimLimit", "capApplied", "netAmount", "calculationTrace", "status",
+        "payoutLocked", "lockVersion", "changeRequestStatus", "changeRequestReason",
+        "disputeTicketId", "payoutBatchId", "payoutStatus", "utrNumber",
+        "ownerId", "updatedAt"
+      ]
+    },
+    "DisputeTicket": {
+      "title": "DisputeTicket",
+      "description": "Employee FTA dispute ticket routed to Business Associate (BA) for source verification.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ticketNumber": { "type": "string", "maxLength": 64 },
+        "statementId": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "employeeId": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "employeeName": { "type": "string", "maxLength": 120 },
+        "designation": { "type": "string", "maxLength": 80 },
+        "department": { "type": "string", "maxLength": 80 },
+        "baseCity": { "type": "string", "maxLength": 80 },
+        "month": { "type": "string", "maxLength": 20 },
+        "claimType": { "type": "string", "maxLength": 60 },
+        "systemRecordedValue": { "type": "number" },
+        "employeeReportedValue": { "type": "number" },
+        "disputedDelta": { "type": "number" },
+        "financialImpact": { "type": "number" },
+        "employeeMessage": { "type": "string", "maxLength": 1000 },
+        "aiInterpretation": { "type": "string", "maxLength": 1000 },
+        "assignedBa": { "type": "string", "maxLength": 120 },
+        "baRegion": { "type": "string", "maxLength": 80 },
+        "sourceTool": { "type": "string", "maxLength": 60 },
+        "status": { "type": "string", "maxLength": 60 },
+        "sourceCorrected": { "type": "boolean" },
+        "reSynced": { "type": "boolean" },
+        "resolutionNotes": { "type": "string", "maxLength": 1000 },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "maxLength": 60 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "ticketNumber", "statementId", "employeeId", "employeeName",
+        "designation", "department", "baseCity", "month", "claimType",
+        "systemRecordedValue", "employeeReportedValue", "disputedDelta",
+        "financialImpact", "employeeMessage", "aiInterpretation", "assignedBa",
+        "baRegion", "sourceTool", "status", "sourceCorrected", "reSynced",
+        "resolutionNotes", "ownerId", "createdAt", "updatedAt"
+      ]
+    },
+    "PayoutBatch": {
+      "title": "PayoutBatch",
+      "description": "Finance disbursement batch generated from HR-approved locked statements.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "batchNumber": { "type": "string", "maxLength": 64 },
+        "month": { "type": "string", "maxLength": 20 },
+        "gatewayName": { "type": "string", "maxLength": 80 },
+        "employeeCount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "maxLength": 40 },
+        "initiatedBy": { "type": "string", "maxLength": 120 },
+        "utrPrefix": { "type": "string", "maxLength": 60 },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "maxLength": 60 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "batchNumber", "month", "gatewayName", "employeeCount",
+        "totalAmount", "status", "initiatedBy", "utrPrefix",
+        "ownerId", "createdAt", "updatedAt"
+      ]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable append-only audit trail entry recording old value, new value, actor, and reference.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "eventType": { "type": "string", "maxLength": 60 },
+        "module": { "type": "string", "maxLength": 60 },
+        "actorName": { "type": "string", "maxLength": 120 },
+        "actorRole": { "type": "string", "maxLength": 60 },
+        "entityId": { "type": "string", "maxLength": 64 },
+        "referenceId": { "type": "string", "maxLength": 64 },
+        "oldValue": { "type": "string", "maxLength": 500 },
+        "newValue": { "type": "string", "maxLength": 500 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "source": { "type": "string", "maxLength": 80 },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "timestamp": { "type": "string", "maxLength": 60 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "eventType", "module", "actorName", "actorRole",
+        "entityId", "referenceId", "oldValue", "newValue",
+        "description", "source", "ownerId", "timestamp", "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Employee master records scoped to the authenticated workspace owner."
+    },
+    "/rates/{rateId}": {
+      "schema": "RateConfig",
+      "description": "Rate master records scoped to the authenticated workspace owner."
+    },
+    "/cities/{cityId}": {
+      "schema": "CityConfig",
+      "description": "City master records scoped to the authenticated workspace owner."
+    },
+    "/source_records/{recordId}": {
+      "schema": "SourceRecord",
+      "description": "Source meeting/travel activity records from Prowl, LeadSquared, and Google Sheet CSV."
+    },
+    "/sync_connectors/{connectorId}": {
+      "schema": "SyncConnector",
+      "description": "Integration connector status and sync metrics."
+    },
+    "/statements/{statementId}": {
+      "schema": "EmployeeStatement",
+      "description": "Monthly employee FTA statements, lock statuses, and disbursement states."
+    },
+    "/disputes/{disputeId}": {
+      "schema": "DisputeTicket",
+      "description": "Employee FTA dispute tickets routed to BAs."
+    },
+    "/payout_batches/{batchId}": {
+      "schema": "PayoutBatch",
+      "description": "Finance disbursement batches."
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Immutable append-only audit event history."
+    }
+  }
+}

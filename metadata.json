@@ -1,0 +1,6 @@
+{
+  "name": "FTA Automation Platform",
+  "description": "Enterprise Field Travel Allowance (FTA) Automation Platform managing source sync, deterministic FTA calculation, employee statements, BA dispute routing, HR payout lock, and finance disbursement.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
